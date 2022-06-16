@@ -7,6 +7,7 @@ Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advance
 """
 
 from argparse import ArgumentParser, Namespace
+import json
 import logging
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -31,7 +32,16 @@ def run(args: Namespace) -> None:
     prep = req.prepare()
     response = session.send(prep)
     if response.ok:
-        LOG.debug("We got one!!")
+        try:
+            data = response.json()
+        except requests.JSONDecodeError as err:
+            LOG.error("JSON error: %s", err)
+            return
+        LOG.debug(json.dumps(data, indent=2))
+        LOG.debug([res["tag_name"] for res in data if "tag_name" in res])
+
+    else:
+        LOG.error("Response not OK getting releases list")
 
 
 def add_arguments(parser: ArgumentParser) -> None:
