@@ -9,8 +9,7 @@ Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advance
 from argparse import ArgumentParser, Namespace
 import json
 import logging
-from re import M
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import urljoin
 import requests
 from requests import JSONDecodeError, Session
