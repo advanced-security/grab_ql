@@ -31,10 +31,10 @@ PLATFORM_TO_ASSET_NAME = {
 
 class QLApi():
     """API for accessing details about CodeQL CLI binary repo on GitHub."""
-    def __init__(self):
+    def __init__(self, repo: str):
         self._api_base = "https://api.github.com/"
         self._owner = "github"
-        self._repo = "codeql-cli-binaries"
+        self._repo = repo
         self._base_uri = urljoin(self._api_base, f"repos/{self._owner}/{self._repo}/")
 
         self._headers = {
@@ -108,30 +108,34 @@ def choose_asset(assets, platform) -> Optional[Dict]:
 
 def get_asset(asset: Dict) -> bool:
     """Grab an asset based on the metadata."""
-    headers = {
-        "Accept": asset["content_type"]
-    }
 
-    size = asset["size"]
-    uri = asset["browser_download_url"]
-    name = asset["name"]
+    try:
+        headers = {
+            "Accept": asset["content_type"]
+        }
+        size = asset["size"]
+        uri = asset["browser_download_url"]
+        name = asset["name"]
+    except KeyError as err:
+        LOG.error("Didn't find expected key in asset results: %s", err)
+        return False
 
     session = Session()
     req = requests.Request("GET", uri, headers=headers)
     prep = req.prepare()
     response = session.send(prep, stream=True)
     if not response.ok:
-        LOG.error("Response not OK getting release binary: %s", name)
+        LOG.error("Response not OK getting download: %s", name)
         return False
 
     try:
         total_length = int(response.headers.get('content-length'))
     except ValueError:
-        LOG.error("Malformed content-length header")
+        LOG.warning("Malformed content-length header")
         total_length = None
 
     if total_length is not None and total_length != size:
-        LOG.error("Asset size is not as expected from metadata: expect was %s vs %s", size, total_length)
+        LOG.error("Download size is not as expected from metadata: expected was %s vs %s", size, total_length)
         return False
 
     total_length = size
@@ -151,8 +155,11 @@ def get_asset(asset: Dict) -> bool:
 def run(args: Namespace) -> None:
     """Main function."""
 
-    api = QLApi()
-    item = api.release(args.tag)
+    get_cli = QLApi("codeql-cli-binaries")
+
+    # TODO: argument to list available tags
+
+    item = get_cli.release(args.tag)
 
     if item is None:
         LOG.error("Error getting release: %s", "latest" if args.tag is None else args.tag)
@@ -161,12 +168,17 @@ def run(args: Namespace) -> None:
     LOG.debug(json.dumps(item, indent=2))
 
     assets = item["assets"]
-
     LOG.debug(json.dumps(assets, indent=2))
-
     asset = choose_asset(assets, args.platform)
-
     get_asset(asset)
+
+    get_libs = QLApi("codeql")
+
+    # TODO: argument to list available tags
+
+    # TODO: override with a second argument if we want a different tag than a v one
+    item = get_libs.release(f"codeql-cli/{args.tag}")
+
 
 
 def add_arguments(parser: ArgumentParser) -> None:
