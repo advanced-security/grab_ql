@@ -131,13 +131,6 @@ class QLApi():
             return max(self.releases(), key=lambda item: isoparse(item["created_at"]))
         except (ValueError, KeyError) as err:
             LOG.error("Failed to get latest item")
-        
-        LOG.debug(json.dumps(self.tags(), indent=2))
-
-        try:
-            return max(self.tags(), key=lambda item: isoparse(item["created_at"]))
-        except (ValueError, KeyError, TypeError) as err:
-            LOG.error("Failed to get latest item")
 
         return None
 
