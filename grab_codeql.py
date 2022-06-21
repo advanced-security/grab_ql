@@ -9,6 +9,7 @@ Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advance
 from argparse import ArgumentParser, Namespace
 import json
 import logging
+import sys
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
 import requests
@@ -21,12 +22,14 @@ DESCRIPTION="Grab, update and optionally package CodeQL binaries and libraries"
 LOG = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
 PLATFORM_TO_ASSET_NAME = {
     "macos": "osx64",
     "windows": "win64",
     "linux": "linux64"
 }
+
+HTTP_FORBIDDEN = 403
+RATE_LIMIT_MSG = "rate limit exceeded"
 
 
 class QLApi():
@@ -43,14 +46,17 @@ class QLApi():
 
         self._session = requests.session()
 
-    def get(self, endpoint: str) -> Optional[List[Dict]]:
+    def query(self, endpoint: str) -> Optional[List[Dict]]:
         """Custom getting for GH API."""
         uri = urljoin(self._base_uri, endpoint)
         req = requests.Request("GET", uri, headers=self._headers)
         prep = req.prepare()
         response = self._session.send(prep)
         if not response.ok:
-            LOG.error("Response not OK getting releases list")
+            LOG.error("Response not OK (%d): %s", response.status_code, response.reason)
+            if response.status_code == HTTP_FORBIDDEN and response.reason == RATE_LIMIT_MSG:
+                LOG.error("Rate limit hit, quitting")
+                sys.exit()
             return
         try:
             data = response.json()
@@ -59,16 +65,30 @@ class QLApi():
             return None
         return data
 
-    def tags(self, _tags=[], force=False) -> List[str]:
-        """Get tag names for CLI repo."""
+    def tags(self, _tags=[], force=False) -> Optional[List[str]]:
+        """Get tag metadata for CLI repo."""
         if len(_tags) == 0 or force:
-            _tags = [tag["name"] for tag in self.get("tags") if "name" in tag]
+            _tags = self.query("tags")
+            if _tags is None:
+                LOG.error("Tags was not retrieved")
+                return None
         return _tags
 
-    def releases(self, _releases=[], force=False) -> List[Dict]:
+    def tag_names(self) -> List[str]:
+        """Get tag names for CLI repo."""
+        tags = self.tags()
+        try:
+            return [tag["name"] for tag in self.tags() if "name" in tag]
+        except TypeError:
+            return []
+
+    def releases(self, _releases=[], force=False) -> Optional[List[Dict]]:
         """Get full release metadata for CLI repo releases."""
         if len(_releases) == 0 or force:
-            _releases = self.get("releases")
+            _releases = self.query("releases")
+            if _releases is None:
+                LOG.error("Failed to list releases")
+                return None
         return _releases
 
     def release(self, tag) -> Optional[Dict]:
@@ -77,24 +97,49 @@ class QLApi():
             return self.latest()
 
         # check if the tag asked for is available
-        if tag not in self.tags():
+        if tag not in self.tag_names():
             LOG.error("Tag %s not in available list", tag)
             return None
         # grab release metadata for the tag
         try:
             return next((item for item in self.releases() if item["tag_name"] == tag))
         except StopIteration:
-            LOG.error("No matching tag in releases.")
+            LOG.error("No matching tag in releases")
+            return None
+
+    def tag(self, tag) -> Optional[Dict]:
+        """Get tag metadata by tag."""
+        if tag is None:
+            return None
+
+        # check if the tag asked for is available
+        if tag not in self.tag_names():
+            LOG.error("Tag %s not in available list", tag)
+            return None
+        # grab tag metadata for the tag
+        try:
+            return next((item for item in self.tags() if item["name"] == tag))
+        except (StopIteration, TypeError):
+            LOG.error("No matching tag")
             return None
 
     def latest(self) -> Optional[Dict]:
         """Give most recently created release."""
+        LOG.debug(json.dumps(self.releases(), indent=2))
+
         try:
             return max(self.releases(), key=lambda item: isoparse(item["created_at"]))
         except (ValueError, KeyError) as err:
             LOG.error("Failed to get latest item")
-            return None
+        
+        LOG.debug(json.dumps(self.tags(), indent=2))
 
+        try:
+            return max(self.tags(), key=lambda item: isoparse(item["created_at"]))
+        except (ValueError, KeyError, TypeError) as err:
+            LOG.error("Failed to get latest item")
+
+        return None
 
 def choose_asset(assets, platform) -> Optional[Dict]:
     """Pick asset from list by selected platform."""
@@ -157,35 +202,60 @@ def run(args: Namespace) -> None:
 
     get_cli = QLApi("codeql-cli-binaries")
 
-    # TODO: argument to list available tags
+    if args.list_tags:
+        print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
 
-    item = get_cli.release(args.tag)
+    cli_tag = None
 
-    if item is None:
-        LOG.error("Error getting release: %s", "latest" if args.tag is None else args.tag)
-        return
+    if args.cli:
+        item = get_cli.release(args.tag)
 
-    LOG.debug(json.dumps(item, indent=2))
+        if item is None:
+            LOG.error("Error getting metadata for CLI release: %s", "latest" if args.tag is None else args.tag)
+            return
 
-    assets = item["assets"]
-    LOG.debug(json.dumps(assets, indent=2))
-    asset = choose_asset(assets, args.platform)
-    get_asset(asset)
+        cli_tag = item.get("tag_name")
+
+        LOG.debug(json.dumps(item, indent=2))
+
+        assets = item.get("assets")
+
+        if assets is not None:
+            LOG.debug(json.dumps(assets, indent=2))
+            asset = choose_asset(assets, args.platform)
+            get_asset(asset)
+        else:
+            LOG.error("Failed to locate assets")
 
     get_libs = QLApi("codeql")
 
-    # TODO: argument to list available tags
+    if args.list_tags:
+        print(f"CodeQL library tags: {get_libs.tag_names()}")
 
-    # TODO: override with a second argument if we want a different tag than a v one
-    item = get_libs.release(f"codeql-cli/{args.tag}")
+    if args.lib:
+        if cli_tag is not None or args.lib_tag is not None:
+            tag = f"codeql-cli/{cli_tag if args.lib_tag is None else args.lib_tag}"
+        else:
+            tag = f"codeql-cli/{get_cli.latest().get('tag_name')}"
 
+        item = get_libs.tag(tag)
+
+        if item is None:
+            LOG.error("Error getting tag: %s", tag)
+            return
+
+        LOG.info(json.dumps(item, indent=2))
 
 
 def add_arguments(parser: ArgumentParser) -> None:
     """Add arguments to argument parser."""
     parser.add_argument("-d", "--debug", action="store_true", help="Debug output on")
-    parser.add_argument("-t", "--tag", required=False, help="Which tag of the GitHub CLI/library to retrieve (gets 'latest' if absent)")
+    parser.add_argument("-t", "--tag", required=False, help="Which tag of the CodeQL CLI/library to retrieve (gets 'latest' if absent)")
+    parser.add_argument("--lib-tag", required=False, help="Which tag of the CodeQL library to retrieve (if absent, uses --tag)")
     parser.add_argument("-p", "--platform", required=False, choices=["macos", "windows", "linux"], help="Which operating system platform? All are 64 bit")
+    parser.add_argument("-c", "--cli", action="store_true", help="Grab the CodeQL CLI binary(ies)")
+    parser.add_argument("-l", "--lib", action="store_true", help="Grab the CodeQL library")
+    parser.add_argument("--list-tags", action="store_true", help="List the available tags")
 
 
 def main() -> None:
