@@ -7,11 +7,12 @@ Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advance
 """
 
 from argparse import ArgumentParser, Namespace
+from io import BufferedWriter
 import json
 import logging
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from urllib.parse import urljoin  # constructing URLs
 import requests  # to do web requests
 from requests import JSONDecodeError, Session
@@ -53,38 +54,10 @@ class QLApi():
 
         uri = urljoin(self._base_uri, endpoint)
         headers = {}
-        headers.update(self._headers)
-        headers.update(self._session.headers)
-        req = requests.Request("GET", uri, headers=headers)
-        prep = req.prepare()
-        LOG.debug(prep.headers)
-        response = self._session.send(prep)
-        LOG.debug(response.request.headers)
-
-        # read rate limit data out of headers
-        limit = response.headers.get("X-RateLimit-Limit")
-        remaining = response.headers.get("X-RateLimit-Remaining")
-
-        if limit is not None:
-            LOG.debug("%d of %d requests for this hour remaining", int(remaining), int(limit))
-            if int(remaining) < WARNING_THRESHOLD:
-                LOG.warning("Only %d requests left this hour", remaining)
-
-        if not response.ok:
-            LOG.error("Response not OK (%d): %s", response.status_code, response.reason)
-            if response.status_code == HTTP_FORBIDDEN and response.reason == RATE_LIMIT_MSG:
-                LOG.error("Rate limit hit, quitting")
-                sys.exit()
-            return
-        try:
-            data = response.json()
-        except JSONDecodeError as err:
-            LOG.error("JSON error: %s", err)
-            return None
-
-        # TODO: account for "paging" in the response - how does it signal there are more results?
-
-        return data
+        return download(
+            uri, session=self._session, headers=headers,
+            json_download=True
+        )
 
     def tags(self, _tags=[], force: bool=False) -> Optional[List[str]]:
         """Get tag metadata for CLI repo."""
@@ -179,11 +152,17 @@ def get_release_asset(asset: Dict, session: Optional[Session]=None, dryrun: bool
         LOG.error("Didn't find expected key in asset results: %s", err)
         return False
 
-    return download(uri, session=session, headers=headers, name=name, size=size, dryrun=dryrun)
+    return download(uri, session=session, headers=headers, name=name, size=size, file_download=True, dryrun=dryrun)
 
 
-def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[str, str]]=None, name: Optional[str]=None, size: Optional[int]=None, dryrun: bool=False) -> bool:
-    """Download the content of a URI, with optional headers, name and size."""
+def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[str, str]]=None,
+        name: Optional[str]=None, size: Optional[int]=None,
+        dryrun: bool=False, file_download: bool=False, json_download: bool=False
+    ) -> Union[bool, Dict]:
+    """Download the content of a URI, with optional headers, name and size.
+    
+    Can do a file download, straight content download, or a JSON decode.
+    """
 
     headers = {} if headers is None else headers
     session = requests.session() if session is None else session
@@ -191,7 +170,7 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
 
     req = requests.Request("GET", uri, headers=headers)
     prep = req.prepare()
-    response = session.send(prep, stream=True)
+    response = session.send(prep, stream=file_download or dryrun)
     
     # read rate limit data out of headers
     limit = response.headers.get("X-RateLimit-Limit")
@@ -206,7 +185,7 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
             name = content_disposition.split("=", maxsplit=1)[1]
 
     if limit is not None:
-        LOG.warning("%d of %d requests for this hour remaining", int(remaining), int(limit))
+        LOG.debug("%d of %d requests for this hour remaining", int(remaining), int(limit))
         if int(remaining) < WARNING_THRESHOLD:
             LOG.warning("Only %d requests left this hour", remaining)
 
@@ -229,21 +208,35 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
     total_length = size
 
     if dryrun:
-        LOG.info("Ending download, dry-run only. Would have downloaded %sB to %s", total_length if total_length is not None else "??", name)
+        LOG.info("Ending download, dry-run only. Would have returned %sB to %s", total_length if total_length is not None else "??", name)
         return True
 
-    with open(name, "wb") as downloaded_item, tqdm(
-        desc=name,
-        total=total_length if total_length is not None else 0,
-        unit='B',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as pb:
-        for data in response.iter_content(chunk_size=4096):
-            downloaded_item.write(data)
-            pb.update(len(data))
-
-    return True
+    try:
+        if file_download:
+            downloaded_item: BufferedWriter
+            with open(name, "wb") as downloaded_item, tqdm(
+                desc=name,
+                total=total_length if total_length is not None else 0,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as pb:
+                data: bytes
+                for data in response.iter_content(chunk_size=4096):
+                    downloaded_item.write(data)
+                    pb.update(len(data))
+            return True
+        elif json_download:
+            try:
+                return response.json()
+            except JSONDecodeError as err:
+                LOG.error("JSON error: %s", err)
+                return None
+        else:
+            return response.content
+    except Exception as err:
+        LOG.error("Error downloading")
+        return False
 
 
 def run(args: Namespace) -> None:
@@ -300,12 +293,12 @@ def run(args: Namespace) -> None:
             LOG.error("Error getting tag: %s", tag)
             return
 
-        LOG.info(json.dumps(item, indent=2))
+        LOG.debug(json.dumps(item, indent=2))
 
         url_key = f"{args.archive_type}ball_url"
         uri = item.get(url_key)
         if uri is not None:
-            if not download(uri, session=session, dryrun=args.dry_run):
+            if not download(uri, session=session, file_download=True, dryrun=args.dry_run):
                 LOG.error("Failed to get QL library at tag: %s", tag)
 
 
