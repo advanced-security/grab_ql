@@ -6,14 +6,17 @@ Grab, update and optionally package CodeQL binaries and libraries.
 Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advanced Security
 """
 
+import sys
+import os
+
 from argparse import ArgumentParser, Namespace
 from io import BufferedWriter
 import json
 import logging
-import os
-import sys
-from typing import Dict, List, Optional, Union
+import platform  # for os/bit/machine detection
+from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urljoin  # constructing URLs
+
 import requests  # to do web requests
 from requests import JSONDecodeError, Session
 from dateutil.parser import isoparse  # to parse dates in the releases
@@ -24,12 +27,52 @@ DESCRIPTION = "Grab, update and optionally package CodeQL binaries and libraries
 LOG = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-PLATFORM_TO_ASSET_NAME = {
-    "macos": "osx64",
-    "windows": "win64",
-    "linux": "linux64"
+ARCHIVE_ZIP = "zip"
+ARCHIVE_TAR = "tar"
+
+BIT_64 = "64"
+BIT_32 = "32"
+ALL_BIT = "all"
+
+DARWIN_OS = "darwin"
+MACOS_OS = "macos"
+WINDOWS_OS = "windows"
+LINUX_OS = "linux"
+ALL_OS = "all"
+THIS_OS = "this"
+
+ARM_MACHINE = "arm"
+INTEL_MACHINE = "intel"
+ALL_MACHINE = "all"
+
+OS_TO_QL_CLI_ASSET_NAME = {
+    DARWIN_OS: "osx64",
+    MACOS_OS: "osx64",
+    WINDOWS_OS: "win64",
+    LINUX_OS: "linux64"
 }
 
+INTEL_MACHINE_STRINGS = {"i386", "i686", "amd64", "x86_64"}
+
+
+def platform_machine_to_vendor(machine: str) -> str:
+    """Normalise machine names to simple vendor strings."""
+    if machine.startswith(ARM_MACHINE):
+        return ARM_MACHINE
+
+    if machine in INTEL_MACHINE_STRINGS:
+        return INTEL_MACHINE
+
+    # fallback to just returning machine
+    return machine
+
+
+CODEQL_BINARIES_REPO = "codeql-cli-binaries"
+CODEQL_LIBRARIES_REPO = "codeql"
+CODEQL_OWNER = "github"
+GITHUB_API_BASE = "https://api.github.com/"
+GITHUB_REPOS_PATH = "repos"
+GITHUB_JSON_ACCEPT_STRING = "application/vnd.github.v3+json"
 HTTP_FORBIDDEN = 403
 RATE_LIMIT_MSG = "rate limit exceeded"
 WARNING_THRESHOLD = 10
@@ -38,19 +81,19 @@ WARNING_THRESHOLD = 10
 class QLApi():
     """API for accessing details about CodeQL CLI binary repo on GitHub."""
     def __init__(self, repo: str, session: Optional[Session]=None):
-        self._api_base = "https://api.github.com/"
-        self._owner = "github"
+        self._api_base = GITHUB_API_BASE
+        self._owner = CODEQL_OWNER
         self._repo = repo
-        self._base_uri = urljoin(self._api_base, f"repos/{self._owner}/{self._repo}/")
+        self._base_uri = urljoin(self._api_base, f"{GITHUB_REPOS_PATH}/{self._owner}/{self._repo}/")
 
         self._headers = {
-            "Accept": "application/vnd.github.v3+json"
+            "Accept": GITHUB_JSON_ACCEPT_STRING
         }
 
         self._session = requests.session() if session is None else session
 
     def query(self, endpoint: str) -> Optional[List[Dict]]:
-        """Custom getting for GH API."""
+        """Query GH API endpoint."""
 
         uri = urljoin(self._base_uri, endpoint)
         headers = {}
@@ -61,6 +104,7 @@ class QLApi():
 
     def tags(self, _tags=[], force: bool=False) -> Optional[List[str]]:
         """Get tag metadata for CLI repo."""
+
         if len(_tags) == 0 or force:
             _tags = self.query("tags")
             if _tags is None:
@@ -70,6 +114,7 @@ class QLApi():
 
     def tag_names(self) -> List[str]:
         """Get tag names for CLI repo."""
+
         tags = self.tags()
         try:
             return [tag["name"] for tag in self.tags() if "name" in tag]
@@ -78,6 +123,7 @@ class QLApi():
 
     def releases(self, _releases=[], force: bool=False) -> Optional[List[Dict]]:
         """Get full release metadata for CLI repo releases."""
+
         if len(_releases) == 0 or force:
             _releases = self.query("releases")
             if _releases is None:
@@ -87,6 +133,7 @@ class QLApi():
 
     def release(self, tag: str) -> Optional[Dict[str, str]]:
         """Get release metadata by tag."""
+
         if tag is None:
             return self.latest()
 
@@ -103,6 +150,7 @@ class QLApi():
 
     def tag(self, tag: str) -> Optional[Dict[str, str]]:
         """Get tag metadata by tag."""
+
         if tag is None:
             return None
 
@@ -119,6 +167,7 @@ class QLApi():
 
     def latest(self) -> Optional[Dict[str, str]]:
         """Give most recently created release."""
+
         LOG.debug(json.dumps(self.releases(), indent=2))
 
         try:
@@ -128,9 +177,11 @@ class QLApi():
 
         return None
 
-def choose_release_asset(assets: List[Dict[str, str]], platform: str=None) -> Optional[Dict]:
+
+def choose_release_asset(assets: List[Dict[str, str]], platform_os: str=None) -> Optional[Dict]:
     """Pick asset from list by selected platform."""
-    name_to_get = f'codeql{"" if platform is None else f"-{PLATFORM_TO_ASSET_NAME.get(platform)}"}.zip'
+
+    name_to_get = f'codeql{"" if (platform_os is None or platform_os == ALL_OS) else f"-{OS_TO_QL_CLI_ASSET_NAME.get(platform_os)}"}.zip'
     try:
         return next((asset for asset in assets if asset["name"] == name_to_get))
     except (StopIteration, KeyError) as err:
@@ -166,6 +217,7 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
 
     headers = {} if headers is None else headers
     session = requests.session() if session is None else session
+    LOG.debug(session)
     headers.update(session.headers)
 
     req = requests.Request("GET", uri, headers=headers)
@@ -190,9 +242,9 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
             LOG.warning("Only %d requests left this hour", remaining)
 
     if not response.ok:
-        LOG.error("Response not OK getting download (%d): %s", response.status_code, name)
+        LOG.error("🛑 Response not OK getting download (%d): %s", response.status_code, name)
         if response.status_code == HTTP_FORBIDDEN and response.reason == RATE_LIMIT_MSG:
-            LOG.error("Rate limit hit, quitting")
+            LOG.error("✋ Rate limit hit, quitting")
             sys.exit()
         return False
 
@@ -239,6 +291,111 @@ def download(uri: str, session: Optional[Session]=None, headers: Optional[Dict[s
         return False
 
 
+def query_cli(tag: str, session: Session, platform_os: str, bits: str, machine: str, list_tags: bool=False, no_cli: bool=False, dry_run: bool=False) -> Optional[str]:
+    """Query the CLI releases and get one if required."""
+
+    get_cli = QLApi(CODEQL_BINARIES_REPO, session)
+
+    if list_tags:
+        print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
+
+    cli_tag = None
+
+    if no_cli:
+        return None
+
+    if bits == BIT_32:
+        LOG.error("🔥 No CodeQL releases are available for 32 bit")
+        return None
+
+    item = get_cli.release(tag)
+
+    if item is None:
+        LOG.error("Error getting metadata for CLI release: %s", "latest" if tag is None else tag)
+        return None
+
+    cli_tag = item.get("tag_name")
+
+    LOG.info("CLI tag is %s", cli_tag)
+
+    # TODO: check if we want macos, arm - if so, check release is >= RELEASE_THAT_SUPPORTED_ARM
+
+    LOG.debug(json.dumps(item, indent=2))
+
+    assets: List[Dict[str, str]] = item.get("assets")
+
+    if assets is not None:
+        LOG.debug(json.dumps(assets, indent=2))
+        asset: Dict[str, str] = choose_release_asset(assets, platform_os)
+        if not get_release_asset(asset, session, dryrun=dry_run):
+            LOG.error("Failed to get release asset")
+            return None
+    else:
+        LOG.error("Failed to locate assets")
+        return None
+
+    return cli_tag
+
+
+def query_lib(
+        lib_tag: str, session: Session, archive_type: str,
+        cli_tag: str=None,
+        list_tags: bool=False, no_lib: bool=False, dry_run: bool=False
+    ) -> Optional[str]:
+    """Query the CodeQL library tags and get one if required."""
+
+    get_libs = QLApi(CODEQL_LIBRARIES_REPO, session)
+
+    if list_tags:
+        print(f"CodeQL library tags: {get_libs.tag_names()}")
+
+    if no_lib:
+        return None
+
+    lib_tag: str = None
+
+    if cli_tag is not None or lib_tag is not None:
+        lib_tag = f"codeql-cli/{cli_tag if lib_tag is None else lib_tag}"
+    else:
+        get_cli = QLApi(CODEQL_BINARIES_REPO, session)
+        lib_tag = f"codeql-cli/{get_cli.latest().get('tag_name')}"
+
+    LOG.info("Library tag is %s", lib_tag)
+
+    item = get_libs.tag(lib_tag)
+
+    if item is None:
+        LOG.error("Error getting tag: %s", lib_tag)
+        return None
+
+    LOG.debug(json.dumps(item, indent=2))
+
+    url_key = f"{archive_type}ball_url"
+    uri = item.get(url_key)
+    if uri is not None:
+        if not download(uri, session=session, file_download=True, dryrun=dry_run):
+            LOG.error("Failed to get QL library at tag: %s", lib_tag)
+            return None
+
+    return lib_tag
+
+
+def resolve_platform(platform_os: str, bits: str, machine: str) -> Tuple[str, str, str]:
+    """Get platform tuple of os, bits, machine if the OS is set to THIS_OS; otherwise return the input."""
+    if platform_os != THIS_OS:
+        return (platform_os, bits, machine)
+
+    resolved =  (
+        platform.system().lower(),
+        BIT_64 if sys.maxsize > 2**32 else BIT_32,
+        platform_machine_to_vendor(platform.machine().lower())
+    )
+
+    LOG.debug("Found this platform: %s", resolved)
+
+    return resolved
+
+
 def run(args: Namespace) -> None:
     """Main function."""
     session = Session()
@@ -248,58 +405,25 @@ def run(args: Namespace) -> None:
         LOG.debug("Using GitHub authentication token")
         session.headers["Authorization"] = f"token {token}"
 
-    get_cli = QLApi("codeql-cli-binaries", session)
+    platform_os, bits, machine = resolve_platform(args.os, args.bits, args.machine)
 
-    if args.list_tags:
-        print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
+    cli_tag: str = query_cli(
+        args.tag, session,
+        platform_os, bits, machine,
+        list_tags=args.list_tags, no_cli=args.no_cli, dry_run=args.dry_run
+    )
 
-    cli_tag = None
+    if not args.no_cli and cli_tag is None:
+        LOG.error("Failed to get/query CLI releases")
 
-    if not args.no_cli:
-        item = get_cli.release(args.tag)
-
-        if item is None:
-            LOG.error("Error getting metadata for CLI release: %s", "latest" if args.tag is None else args.tag)
-            return
-
-        cli_tag = item.get("tag_name")
-
-        LOG.debug(json.dumps(item, indent=2))
-
-        assets: List[Dict[str, str]] = item.get("assets")
-
-        if assets is not None:
-            LOG.debug(json.dumps(assets, indent=2))
-            asset: Dict[str, str] = choose_release_asset(assets, args.platform)
-            if not get_release_asset(asset, session, dryrun=args.dry_run):
-                LOG.error("Failed to get release asset")
-        else:
-            LOG.error("Failed to locate assets")
-
-    get_libs = QLApi("codeql", session)
-
-    if args.list_tags:
-        print(f"CodeQL library tags: {get_libs.tag_names()}")
-
-    if not args.no_lib:
-        if cli_tag is not None or args.lib_tag is not None:
-            tag = f"codeql-cli/{cli_tag if args.lib_tag is None else args.lib_tag}"
-        else:
-            tag = f"codeql-cli/{get_cli.latest().get('tag_name')}"
-
-        item = get_libs.tag(tag)
-
-        if item is None:
-            LOG.error("Error getting tag: %s", tag)
-            return
-
-        LOG.debug(json.dumps(item, indent=2))
-
-        url_key = f"{args.archive_type}ball_url"
-        uri = item.get(url_key)
-        if uri is not None:
-            if not download(uri, session=session, file_download=True, dryrun=args.dry_run):
-                LOG.error("Failed to get QL library at tag: %s", tag)
+    lib_tag: str = query_lib(
+        args.lib_tag, session, args.archive_type,
+        cli_tag=cli_tag,
+        list_tags=args.list_tags, no_lib=args.no_lib, dry_run=args.dry_run
+    )
+        
+    if not args.no_lib and lib_tag is None:
+        LOG.error("Failed to get/query CodeQL library")
 
 
 def add_arguments(parser: ArgumentParser) -> None:
@@ -307,13 +431,15 @@ def add_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("-d", "--debug", action="store_true", help="Debug output on")
     parser.add_argument("-t", "--tag", required=False, help="Which tag of the CodeQL CLI/library to retrieve (gets 'latest' if absent)")
     parser.add_argument("-l", "--lib-tag", required=False, help="Which tag of the CodeQL library to retrieve (if absent, uses --tag)")
-    parser.add_argument("-p", "--platform", required=False, choices=["macos", "windows", "linux"], help="Which operating system platform? All are 64 bit")
-    parser.add_argument("--dry-run", action="store_true", help="Do not do any downloads - just check that they exist and are possible to get")
+    parser.add_argument("-o", "--os", required=False, choices=(MACOS_OS, WINDOWS_OS, LINUX_OS, ALL_OS, THIS_OS), help="Operating system")
+    parser.add_argument("-b", "--bits", required=False, choices=(BIT_32, BIT_32, ALL_BIT), default="64", help="Platform bit size. If --os is 'this', platform bits is always used")
+    parser.add_argument("-m", "--machine", required=False, choices=(ARM_MACHINE, INTEL_MACHINE, ALL_MACHINE), default="intel", help="Platform machine (arm includes M-series Apple machines). If --os is 'this', platform machine is always used")
+    parser.add_argument("-D", "--dry-run", action="store_true", help="Do not do any downloads - check they exist only")
     parser.add_argument("-C", "--no-cli", action="store_true", help="Do not grab the CodeQL CLI binary")
     parser.add_argument("-L", "--no-lib", action="store_true", help="Do not grab the CodeQL library")
     parser.add_argument("--list-tags", action="store_true", help="List the available tags")
     parser.add_argument("-g", "--github-token", required=False, help="GitHub Authentication token (e.g. PAT)")
-    parser.add_argument("-a", "--archive-type", choices=["zip, tar"], default="zip", help="Which kind of archive to prefer")
+    parser.add_argument("-a", "--archive-type", choices=(ARCHIVE_ZIP, ARCHIVE_TAR), default=ARCHIVE_ZIP, help="Which kind of archive to prefer")
 
 
 def main() -> None:
