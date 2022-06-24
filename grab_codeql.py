@@ -46,13 +46,16 @@ INTEL_MACHINE = "intel"
 ALL_MACHINE = "all"
 
 OS_TO_QL_CLI_ASSET_NAME = {
-    DARWIN_OS: "osx64",
     MACOS_OS: "osx64",
     WINDOWS_OS: "win64",
     LINUX_OS: "linux64"
 }
 
-INTEL_MACHINE_STRINGS = {"i386", "i686", "amd64", "x86_64"}
+PLATFORM_OS_MAPPING = {
+    DARWIN_OS: MACOS_OS
+}
+
+INTEL_MACHINE_STRINGS = {"i386", "i486", "i586", "i686", "amd64", "x86_64"}
 
 
 def platform_machine_to_vendor(machine: str) -> str:
@@ -65,6 +68,11 @@ def platform_machine_to_vendor(machine: str) -> str:
 
     # fallback to just returning machine
     return machine
+
+
+def platform_system_normalise(platform_os: str) -> str:
+    """Normalise operating system name to strings used internally."""
+    return PLATFORM_OS_MAPPING.get(platform_os, platform_os)
 
 
 CODEQL_BINARIES_REPO = "codeql-cli-binaries"
@@ -316,7 +324,7 @@ def query_cli(tag: str, session: Session, platform_os: str, bits: str, machine: 
 
     cli_tag = item.get("tag_name")
 
-    LOG.info("CLI tag is %s", cli_tag)
+    LOG.info("CLI tag is %s, getting for platform %s/%s/%s", cli_tag, platform_os, machine, bits)
 
     # TODO: check if we want macos, arm - if so, check release is >= RELEASE_THAT_SUPPORTED_ARM
 
@@ -386,7 +394,7 @@ def resolve_platform(platform_os: str, bits: str, machine: str) -> Tuple[str, st
         return (platform_os, bits, machine)
 
     resolved =  (
-        platform.system().lower(),
+        platform_system_normalise(platform.system().lower()),
         BIT_64 if sys.maxsize > 2**32 else BIT_32,
         platform_machine_to_vendor(platform.machine().lower())
     )
@@ -431,7 +439,7 @@ def add_arguments(parser: ArgumentParser) -> None:
     parser.add_argument("-d", "--debug", action="store_true", help="Debug output on")
     parser.add_argument("-t", "--tag", required=False, help="Which tag of the CodeQL CLI/library to retrieve (gets 'latest' if absent)")
     parser.add_argument("-l", "--lib-tag", required=False, help="Which tag of the CodeQL library to retrieve (if absent, uses --tag)")
-    parser.add_argument("-o", "--os", required=False, choices=(MACOS_OS, WINDOWS_OS, LINUX_OS, ALL_OS, THIS_OS), help="Operating system")
+    parser.add_argument("-o", "--os", required=False, choices=(MACOS_OS, WINDOWS_OS, LINUX_OS, ALL_OS, THIS_OS), default=THIS_OS, help="Operating system (defaults to 'this' platform)")
     parser.add_argument("-b", "--bits", required=False, choices=(BIT_32, BIT_32, ALL_BIT), default="64", help="Platform bit size. If --os is 'this', platform bits is always used")
     parser.add_argument("-m", "--machine", required=False, choices=(ARM_MACHINE, INTEL_MACHINE, ALL_MACHINE), default="intel", help="Platform machine (arm includes M-series Apple machines). If --os is 'this', platform machine is always used")
     parser.add_argument("-D", "--dry-run", action="store_true", help="Do not do any downloads - check they exist only")
