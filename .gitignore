@@ -1,2 +1,5 @@
 workspace.code-workspace
 *.zip
+*.tar.gz
+*.tar
+*.vsix
