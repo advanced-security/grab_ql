@@ -418,7 +418,8 @@ def http_query(uri: str, session: Optional[Session]=None, headers: Optional[Dict
     if total_length is not None and size is not None and total_length != size:
         LOG.warning("Download size is not as expected from metadata: expected was %s vs %s", size, total_length)
 
-    total_length = size
+    if size is not None:
+        total_length = size
 
     if dry_run:
         LOG.info("Ending download, dry-run only. Would have got %sB to %s", total_length if total_length is not None else "??", name)
