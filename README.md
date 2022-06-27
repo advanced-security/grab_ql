@@ -30,6 +30,8 @@ python3 -m pip install <wheel name>.whl
 * Pip
 * Python dependencies via PyPi (see `requirements.txt`)
 * web connection
+  * to use the [GitHub API](https://docs.github.com/en/rest/guides/getting-started-with-the-rest-api), [MarketPlace](https://marketplace.visualstudio.com/) API, and to download installer files
+* Optionally: HomeBrew (on MacOS, Linux or WSL)
 
 ## Build dependencies
 
