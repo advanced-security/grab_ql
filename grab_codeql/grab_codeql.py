@@ -5,26 +5,25 @@ Grab, update and optionally package CodeQL binaries and libraries.
 Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advanced Security
 """
 
+import json
+import logging
+import os
+import platform  # for os/bit/machine detection
 import shutil
 import subprocess  # nosec
 import sys
-import os
-
-from argparse import ArgumentParser, Namespace
-import json
-import logging
-import platform  # for os/bit/machine detection
 import tempfile
+from argparse import ArgumentParser, Namespace
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote_plus, urljoin  # constructing URLs
 
+import distro  # to identify Linux distributions
+import requests  # to do web requests
 # from PyPi
 from dateutil.parser import isoparse  # to parse dates in the releases
-import requests  # to do web requests
 from requests import JSONDecodeError, Session
 from requests.structures import CaseInsensitiveDict
 from tqdm import tqdm  # for a progress bar
-import distro  # to identify Linux distributions
 
 DESCRIPTION = "Grab, update and optionally package CodeQL binaries and libraries"
 LOG = logging.getLogger(__name__)
