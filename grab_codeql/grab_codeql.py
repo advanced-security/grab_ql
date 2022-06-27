@@ -5,6 +5,7 @@ Grab, update and optionally package CodeQL binaries and libraries.
 Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advanced Security
 """
 
+import shutil
 import subprocess  # nosec
 import sys
 import os
@@ -12,8 +13,8 @@ import os
 from argparse import ArgumentParser, Namespace
 import json
 import logging
-import platform
-import tempfile  # for os/bit/machine detection
+import platform  # for os/bit/machine detection
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote_plus, urljoin  # constructing URLs
 
@@ -87,7 +88,7 @@ VSCODE_LINUX_SNAP_SUFFIX = "snap"
 VSCODE_LINUX_DISTRO_DEBIAN = "debian"
 VSCODE_LINUX_DISTRO_REDHAT = "redhat"
 VSCODE_LINUX_DISTRO_SNAP = "snap"
-VSCODE_MACOS_DISTRO_BREW = "brew"
+VSCODE_DISTRO_BREW = "brew"
 VSCODE_MACOS_DISTRO_ARCHIVE = "zip"
 VSCODE_DOWNLOAD_BASE = "https://update.code.visualstudio.com/"
 VSCODE_STABLE = "stable"
@@ -102,6 +103,8 @@ VSCODE_LINUX_DISTRO_MAPPING = {
     VSCODE_LINUX_DISTRO_REDHAT: VSCODE_LINUX_REDHAT_SUFFIX,
     VSCODE_LINUX_DISTRO_SNAP: VSCODE_LINUX_SNAP_SUFFIX
 }
+VSCODE_HOMEBREW_PACKAGE_NAME = "visual-studio-code"
+VSCODE_HOMEBREW_FAILED_MSG = "Failed to install VSCode via HomeBrew. Falling back to archive."
 
 MARKETPLACE_INCLUDE_VERSIONS_FLAG = 0x01
 MARKETPLACE_EXCLUDE_NONVALIDATED_FLAG = 0x20
@@ -141,7 +144,8 @@ class GitHubApi():
                  owner: str,
                  repo: str,
                  session: Optional[Session] = None,
-                 token: Optional[str] = None):
+                 token: Optional[str] = None,
+                 download_path: Optional[str] = None):
         self._api_base = GITHUB_API_BASE
         self._owner = owner
         self._repo = repo
@@ -149,6 +153,7 @@ class GitHubApi():
             self._api_base,
             f"{quote_plus(GITHUB_REPOS_PATH)}/{quote_plus(self._owner)}/{quote_plus(self._repo)}/"
         )
+        self._download_path = download_path
 
         self._headers = CaseInsensitiveDict({
             "Accept": GITHUB_JSON_ACCEPT_STRING,
@@ -266,7 +271,10 @@ class GitHubApi():
 
 class MarketPlaceApi():
 
-    def __init__(self, session: Session = None, dry_run: bool = False) -> None:
+    def __init__(self,
+                 session: Session = None,
+                 dry_run: bool = False,
+                 download_path: Optional[str] = None) -> None:
         self._uri = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=3.0-preview.1"
         self._headers = CaseInsensitiveDict({
             "content-type": "application/json",
@@ -275,6 +283,7 @@ class MarketPlaceApi():
         })
         self._session = session
         self.dry_run = dry_run
+        self._download_path = download_path
 
     def _versions(self,
                   name: str,
@@ -378,7 +387,8 @@ class MarketPlaceApi():
                          name=f"{name}_{version}.vsix",
                          session=self._session,
                          file_download=True,
-                         dry_run=self.dry_run)
+                         dry_run=self.dry_run,
+                         download_path=self._download_path)
         return bool(res)
 
 
@@ -399,7 +409,8 @@ def choose_release_asset(assets: List[Dict[str, str]],
 
 def get_release_asset(asset: Dict,
                       session: Optional[Session] = None,
-                      dryrun: bool = False) -> bool:
+                      dryrun: bool = False,
+                      download_path: Optional[str] = None) -> bool:
     """Grab an asset based on the metadata."""
 
     try:
@@ -418,21 +429,24 @@ def get_release_asset(asset: Dict,
                      name=name,
                      size=size,
                      file_download=True,
-                     dry_run=dryrun)
+                     dry_run=dryrun,
+                     download_path=download_path)
     return bool(res)
 
 
-def http_query(uri: str,
-               session: Optional[Session] = None,
-               headers: Optional[CaseInsensitiveDict] = None,
-               name: Optional[str] = None,
-               size: Optional[int] = None,
-               dry_run: bool = False,
-               file_download: bool = False,
-               json_download: bool = False,
-               method: str = HTTP_GET,
-               data: Any = None,
-               json_data: Any = None) -> Union[bool, Dict, bytes, None]:
+def http_query(
+        uri: str,
+        session: Optional[Session] = None,
+        headers: Optional[CaseInsensitiveDict] = None,
+        name: Optional[str] = None,
+        size: Optional[int] = None,
+        dry_run: bool = False,
+        file_download: bool = False,
+        json_download: bool = False,
+        method: str = HTTP_GET,
+        data: Any = None,
+        json_data: Any = None,
+        download_path: Optional[str] = None) -> Union[bool, Dict, bytes, None]:
     """Download the content of a URI, with optional headers, name and size.
     Can do a file download, straight content download, or a JSON decode.
     """
@@ -499,21 +513,30 @@ def http_query(uri: str,
 
     try:
         if file_download:
-            # yapf: disable
-            pb: Any
-            with open(name, "wb") if name is not None else tempfile.NamedTemporaryFile() as downloaded_item, tqdm(
-                desc=name,
-                total=total_length if total_length is not None else 0,
-                unit='B',
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as pb:
-                # yapf: enable
-                response_data: bytes
-                for response_data in response.iter_content(chunk_size=4096):
-                    downloaded_item.write(response_data)
-                    pb.update(len(response_data))
-            return True
+            try:
+                # yapf: disable
+                pb: Any
+                with open(
+                    os.path.join(download_path, name) if download_path is not None else name,
+                    "wb"
+                ) if name is not None else tempfile.NamedTemporaryFile(
+                    "wb", dir=download_path
+                ) as item, tqdm(
+                    desc=name,
+                    total=total_length if total_length is not None else 0,
+                    unit='B',
+                    unit_scale=True,
+                    unit_divisor=1024,
+                ) as pb:
+                    # yapf: enable
+                    response_data: bytes
+                    for response_data in response.iter_content(chunk_size=4096):
+                        item.write(response_data)
+                        pb.update(len(response_data))
+                return True
+            except KeyboardInterrupt:
+                LOG.debug("Stopping download")
+                return False
         elif json_download:
             try:
                 return response.json()
@@ -535,7 +558,8 @@ def query_cli(tag: str,
               list_tags: bool = False,
               no_cli: bool = False,
               dry_run: bool = False,
-              token: Optional[str] = None) -> Optional[str]:
+              token: Optional[str] = None,
+              download_path: Optional[str] = None) -> Optional[str]:
     """Query the CLI releases and get one if required."""
 
     get_cli = GitHubApi(CODEQL_OWNER, CODEQL_BINARIES_REPO, session, token)
@@ -592,7 +616,8 @@ def query_lib(lib_tag: Optional[str],
               list_tags: bool = False,
               no_lib: bool = False,
               dry_run: bool = False,
-              token: Optional[str] = None) -> Optional[str]:
+              token: Optional[str] = None,
+              download_path: Optional[str] = None) -> Optional[str]:
     """Query the CodeQL library tags and get one if required."""
 
     get_libs = GitHubApi(CODEQL_OWNER, CODEQL_LIBRARIES_REPO, session, token)
@@ -627,8 +652,11 @@ def query_lib(lib_tag: Optional[str],
     url_key = f"{archive_type}ball_url"
     uri = item.get(url_key)
     if uri is not None:
-        if not http_query(
-                uri, session=session, file_download=True, dry_run=dry_run):
+        if not http_query(uri,
+                          session=session,
+                          file_download=True,
+                          dry_run=dry_run,
+                          download_path=download_path):
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
             return None
 
@@ -644,7 +672,8 @@ def query_vscode(vscode_version: Optional[str],
                  linux_installer: str = None,
                  macos_installer: str = None,
                  no_vscode: bool = False,
-                 dry_run: bool = False) -> bool:
+                 dry_run: bool = False,
+                 download_path: Optional[str] = None) -> bool:
     """Discover available versions of VSCode and get selected version or 'latest'.
         Based on https://code.visualstudio.com/Download and
     https://code.visualstudio.com/docs/supporting/faq#_previous-release-versions
@@ -727,15 +756,70 @@ def query_vscode(vscode_version: Optional[str],
     #         LOG.error("VSCode is not available for 32 bit Linux, sorry.")
     #         return None
 
-    if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_MACOS_DISTRO_BREW:
+    brew_fetch_args = [
+        "fetch", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
+    ]
+    brew_binary = None
+    brew_ok: bool = False
+
+    if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_DISTRO_BREW:
         # call out to `brew install --cask visual-studio-code`
-        ret = subprocess.run([  # nosec
-            "/opt/homebrew/bin/brew", "install", "--cask", "visual-studio-code"
-        ])
+        brew_binary = "/opt/homebrew/bin/brew"
+        ret = subprocess.run(  # nosec
+            [brew_binary, *brew_fetch_args], capture_output=True)
         if ret.returncode != 0:
-            LOG.error(
-                "Failed to install VSCode via HomeBrew. Falling back to archive."
-            )
+            brew_binary = os.path.join(os.environ.get("HOME", "/"),
+                                       "Applications/homebrew/bin/brew")
+            ret = subprocess.run(  # nosec
+                [brew_binary, *brew_fetch_args], capture_output=True)
+            if ret.returncode != 0:
+                pass
+            else:
+                brew_ok = True
+        else:
+            brew_ok = True
+
+    if vscode_os == VSCODE_LINUX and linux_installer == VSCODE_DISTRO_BREW:
+        # call out to `brew install --cask visual-studio-code`
+        brew_binary = os.path.join(os.environ.get("HOME", "/"),
+                                   "./linuxbrew/bin/brew")
+        ret = subprocess.run(  # nosec
+            [brew_binary, *brew_fetch_args], capture_output=True)
+        if ret.returncode != 0:
+            brew_binary = os.path.join("/home/linuxbrew/",
+                                       ".linuxbrew/bin/brew")
+            ret = subprocess.run(  # nosec
+                [brew_binary, *brew_fetch_args], capture_output=True)
+            if ret.returncode != 0:
+                pass
+            else:
+                brew_ok = True
+        else:
+            brew_ok = True
+
+    if brew_binary is not None:
+        brew_cache_args = ["--cache", VSCODE_HOMEBREW_PACKAGE_NAME]
+
+        ret = subprocess.run(  # nosec
+            [
+                brew_binary,
+                *brew_cache_args,
+            ], capture_output=True)
+        if ret.returncode != 0:
+            LOG.error("Failed to locate Homebrew cache")
+        else:
+            cached_path = ret.stdout.decode('utf-8').strip()
+            LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
+            target = shutil.copy2(cached_path, os.getcwd())
+            LOG.info("VSCode Homebrew installer at %s", target)
+            brew_ok = True
+
+        if not brew_ok:
+            LOG.error(VSCODE_HOMEBREW_FAILED_MSG)
+            linux_installer = None
+            macos_installer = None
+        else:
+            return True
 
     platform_parts: List[str] = []
     platform_parts.append(vscode_os)
@@ -747,7 +831,9 @@ def query_vscode(vscode_version: Optional[str],
             linux_download = VSCODE_LINUX_DISTRO_MAPPING.get(
                 linux_installer, None)
             if linux_download == VSCODE_LINUX_DISTRO_SNAP:
-                LOG.warning("VSCode packaged as a snap may not work properly!")
+                LOG.warning(
+                    "😱 VSCode packaged as a snap may not work properly, due to its sandboxing!"
+                )
             if linux_download is not None:
                 platform_parts.append(linux_download)
             # otherwise put nothing, and it'll get the archive
@@ -781,7 +867,11 @@ def query_vscode(vscode_version: Optional[str],
 
     uri: str = f"{VSCODE_DOWNLOAD_BASE}/{quote_plus(vscode_version)}/{quote_plus(platform_string)}/{quote_plus(track)}"
 
-    if not http_query(uri, session, file_download=True, dry_run=dry_run):
+    if not http_query(uri,
+                      session,
+                      file_download=True,
+                      dry_run=dry_run,
+                      download_path=download_path):
         LOG.error("Failed to download for %s/%s/%sbit", platform_os, machine,
                   bits)
         return False
@@ -820,12 +910,15 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
                            session: Session = None,
                            dry_run: bool = False,
                            no_vscode_extension: bool = False,
-                           list_tags: bool = False) -> bool:
+                           list_tags: bool = False,
+                           download_path: Optional[str] = None) -> bool:
     """Query and/or get the VSCode QL extension."""
     if no_vscode_extension:
         return True
 
-    marketplace = MarketPlaceApi(session=session, dry_run=dry_run)
+    marketplace = MarketPlaceApi(session=session,
+                                 dry_run=dry_run,
+                                 download_path=download_path)
 
     if list_tags:
         LOG.info(marketplace.versions(MARKETPLACE_CODEQL_FQNAME))
@@ -839,7 +932,8 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
         vscode_extension_version = vscode_extension["version"]
 
     if not marketplace.get(MARKETPLACE_CODEQL_FQNAME, vscode_extension_version):
-        LOG.error("Failed to get VSCode extension")
+        LOG.error("Failed to get VSCode extension.")
+        return False
 
     return True
 
@@ -862,10 +956,14 @@ def run(args: Namespace) -> None:
                                        list_tags=args.list_tags,
                                        no_cli=args.no_cli,
                                        dry_run=args.dry_run,
-                                       token=token)
+                                       token=token,
+                                       download_path=args.download_path)
 
     if not args.no_cli and cli_tag is None:
-        LOG.error("Failed to get/query CLI releases")
+        LOG.error("Failed to get/query CLI releases. "
+                  "Please report the error, "
+                  "try https://github.com/github/codeql-cli-binaries/releases"
+                  " or check the arguments you passed in.")
 
     lib_tag: Optional[str] = query_lib(args.lib_tag,
                                        session,
@@ -874,10 +972,14 @@ def run(args: Namespace) -> None:
                                        list_tags=args.list_tags,
                                        no_lib=args.no_lib,
                                        dry_run=args.dry_run,
-                                       token=token)
+                                       token=token,
+                                       download_path=args.download_path)
 
     if not args.no_lib and lib_tag is None:
-        LOG.error("Failed to get/query CodeQL library")
+        LOG.error("Failed to get/query CodeQL library. "
+                  "Please report the error, "
+                  "try https://github.com/github/codeql/"
+                  " or check the arguments you passed in.")
 
     vscode_version_download = query_vscode(
         args.vscode_ver,
@@ -889,22 +991,28 @@ def run(args: Namespace) -> None:
         linux_installer=distro,
         macos_installer=args.vscode_macos_installer,
         no_vscode=args.no_vscode,
-        dry_run=args.dry_run)
+        dry_run=args.dry_run,
+        download_path=args.download_path)
 
     if not args.dry_run and not args.no_vscode and vscode_version_download is None:
-        LOG.error(
-            "VSCode download failed. "
-            "Try https://code.visualstudio.com/Download for more options, or check the arguments you passed in."
-        )
+        LOG.error("VSCode download failed. "
+                  "Please report the error, "
+                  "try https://code.visualstudio.com/Download"
+                  " or check the arguments you passed in.")
 
     vscode_extension_version_download = query_vscode_extension(
         args.vscode_ext_ver,
         session,
         no_vscode_extension=args.no_vscode_ext,
-        dry_run=args.dry_run)
+        dry_run=args.dry_run,
+        download_path=args.download_path)
 
     if not args.dry_run and not args.no_vscode_ext and vscode_extension_version_download is None:
-        LOG.error("VSCode extension download failed.")
+        LOG.error(
+            "VSCode extension download failed. "
+            "Please report the error, "
+            "try https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql"
+            " or check the arguments you passed in.")
 
 
 def add_arguments(parser: ArgumentParser) -> None:
@@ -913,6 +1021,10 @@ def add_arguments(parser: ArgumentParser) -> None:
                         "--debug",
                         action="store_true",
                         help="Debug output on")
+    parser.add_argument("-p",
+                        "--download-path",
+                        default=os.getcwd(),
+                        help="Download path (default is CWD)")
     parser.add_argument(
         "-t",
         "--tag",
@@ -971,14 +1083,14 @@ def add_arguments(parser: ArgumentParser) -> None:
         "--vscode-linux-installer",
         required=False,
         choices=(VSCODE_LINUX_DISTRO_DEBIAN, VSCODE_LINUX_DISTRO_REDHAT,
-                 VSCODE_LINUX_DISTRO_SNAP, None),
+                 VSCODE_LINUX_DISTRO_SNAP, VSCODE_DISTRO_BREW, None),
         help="Installer type for VSCode Linux install (defaults to archive)")
     parser.add_argument(
         "--vscode-macos-installer",
         required=False,
-        choices=(VSCODE_MACOS_DISTRO_BREW, VSCODE_MACOS_DISTRO_ARCHIVE),
-        default=VSCODE_MACOS_DISTRO_BREW,
-        help="Installer type for VSCode MacOS install (defaults to 'brew'")")
+        choices=(VSCODE_DISTRO_BREW, VSCODE_MACOS_DISTRO_ARCHIVE),
+        default=VSCODE_DISTRO_BREW,
+        help="Installer type for VSCode MacOS install (defaults to 'brew')")
     parser.add_argument("-D",
                         "--dry-run",
                         action="store_true",
