@@ -5,6 +5,7 @@ Grab, update and optionally package CodeQL binaries and libraries.
 Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advanced Security
 """
 
+import subprocess  # nosec
 import sys
 import os
 
@@ -86,6 +87,8 @@ VSCODE_LINUX_SNAP_SUFFIX = "snap"
 VSCODE_LINUX_DISTRO_DEBIAN = "debian"
 VSCODE_LINUX_DISTRO_REDHAT = "redhat"
 VSCODE_LINUX_DISTRO_SNAP = "snap"
+VSCODE_MACOS_DISTRO_BREW = "brew"
+VSCODE_MACOS_DISTRO_ARCHIVE = "zip"
 VSCODE_DOWNLOAD_BASE = "https://update.code.visualstudio.com/"
 VSCODE_STABLE = "stable"
 VSCODE_INSIDERS = "insiders"
@@ -151,7 +154,7 @@ class GitHubApi():
             "Accept": GITHUB_JSON_ACCEPT_STRING,
         })
 
-        if token is not None and token != "":
+        if token is not None and len(token) > 0:
             self._headers.update(
                 CaseInsensitiveDict({"Authorization": f"token {token}"}))
 
@@ -639,6 +642,7 @@ def query_vscode(vscode_version: Optional[str],
                  machine: str,
                  windows_installer: str = None,
                  linux_installer: str = None,
+                 macos_installer: str = None,
                  no_vscode: bool = False,
                  dry_run: bool = False) -> bool:
     """Discover available versions of VSCode and get selected version or 'latest'.
@@ -723,6 +727,16 @@ def query_vscode(vscode_version: Optional[str],
     #         LOG.error("VSCode is not available for 32 bit Linux, sorry.")
     #         return None
 
+    if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_MACOS_DISTRO_BREW:
+        # call out to `brew install --cask visual-studio-code`
+        ret = subprocess.run([  # nosec
+            "/opt/homebrew/bin/brew", "install", "--cask", "visual-studio-code"
+        ])
+        if ret.returncode != 0:
+            LOG.error(
+                "Failed to install VSCode via HomeBrew. Falling back to archive."
+            )
+
     platform_parts: List[str] = []
     platform_parts.append(vscode_os)
 
@@ -732,6 +746,8 @@ def query_vscode(vscode_version: Optional[str],
         if linux_installer is not None:
             linux_download = VSCODE_LINUX_DISTRO_MAPPING.get(
                 linux_installer, None)
+            if linux_download == VSCODE_LINUX_DISTRO_SNAP:
+                LOG.warning("VSCode packaged as a snap may not work properly!")
             if linux_download is not None:
                 platform_parts.append(linux_download)
             # otherwise put nothing, and it'll get the archive
@@ -871,6 +887,7 @@ def run(args: Namespace) -> None:
         machine,
         windows_installer=args.vscode_windows_installer,
         linux_installer=distro,
+        macos_installer=args.vscode_macos_installer,
         no_vscode=args.no_vscode,
         dry_run=args.dry_run)
 
@@ -956,6 +973,12 @@ def add_arguments(parser: ArgumentParser) -> None:
         choices=(VSCODE_LINUX_DISTRO_DEBIAN, VSCODE_LINUX_DISTRO_REDHAT,
                  VSCODE_LINUX_DISTRO_SNAP, None),
         help="Installer type for VSCode Linux install (defaults to archive)")
+    parser.add_argument(
+        "--vscode-macos-installer",
+        required=False,
+        choices=(VSCODE_MACOS_DISTRO_BREW, VSCODE_MACOS_DISTRO_ARCHIVE),
+        default=VSCODE_MACOS_DISTRO_BREW,
+        help="Installer type for VSCode MacOS install (defaults to 'brew'")")
     parser.add_argument("-D",
                         "--dry-run",
                         action="store_true",
