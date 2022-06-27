@@ -3,3 +3,6 @@ workspace.code-workspace
 *.tar.gz
 *.tar
 *.vsix
+dist/
+*.egg-info/
+.mypy_cache/

@@ -1,0 +1,3 @@
+from typing import Any, TypeVar, ContextManager
+_T = TypeVar("_T")
+def tqdm(**kwargs: Any) -> ContextManager[_T]: ...
