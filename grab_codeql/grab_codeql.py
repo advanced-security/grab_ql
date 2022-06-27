@@ -146,6 +146,7 @@ class GitHubApi():
                  session: Optional[Session] = None,
                  token: Optional[str] = None,
                  download_path: Optional[str] = None):
+        """Init API."""
         self._api_base = GITHUB_API_BASE
         self._owner = owner
         self._repo = repo
@@ -167,7 +168,6 @@ class GitHubApi():
 
     def query(self, endpoint: str) -> Optional[Any]:
         """Query GH API endpoint."""
-
         uri = urljoin(self._base_uri, quote_plus(endpoint))
         res = http_query(uri,
                          session=self._session,
@@ -179,7 +179,6 @@ class GitHubApi():
              _tags=[],
              force: bool = False) -> Optional[List[Dict[str, Any]]]:
         """Get tag metadata for CLI repo."""
-
         if len(_tags) == 0 or force:
             _tags = self.query("tags")
             if _tags is None:
@@ -189,7 +188,6 @@ class GitHubApi():
 
     def tag_names(self) -> List[str]:
         """Get tag names for CLI repo."""
-
         tags = self.tags()
         if tags is not None:
             try:
@@ -202,7 +200,6 @@ class GitHubApi():
                  _releases=[],
                  force: bool = False) -> Optional[List[Dict]]:
         """Get full release metadata for CLI repo releases."""
-
         if len(_releases) == 0 or force:
             _releases = self.query("releases")
             if _releases is None:
@@ -212,7 +209,6 @@ class GitHubApi():
 
     def release(self, tag: str) -> Optional[Dict[str, Any]]:
         """Get release metadata by tag."""
-
         if tag is None:
             return self.latest()
 
@@ -234,7 +230,6 @@ class GitHubApi():
 
     def tag(self, tag: str) -> Optional[Dict[str, str]]:
         """Get tag metadata by tag."""
-
         if tag is None:
             return None
 
@@ -254,7 +249,6 @@ class GitHubApi():
 
     def latest(self) -> Optional[Dict[str, str]]:
         """Give most recently created release."""
-
         releases = self.releases()
 
         LOG.debug(json.dumps(releases, indent=2))
@@ -270,11 +264,13 @@ class GitHubApi():
 
 
 class MarketPlaceApi():
+    """Visual Studio MarketPlace - a reduced API."""
 
     def __init__(self,
                  session: Session = None,
                  dry_run: bool = False,
                  download_path: Optional[str] = None) -> None:
+        """Init API."""
         self._uri = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=3.0-preview.1"
         self._headers = CaseInsensitiveDict({
             "content-type": "application/json",
@@ -395,7 +391,6 @@ class MarketPlaceApi():
 def choose_release_asset(assets: List[Dict[str, str]],
                          platform_os: str = None) -> Optional[Dict[str, str]]:
     """Pick asset from list by selected platform."""
-
     name_to_get = (
         'codeql' +
         f'{"" if (platform_os is None or platform_os == ALL_OS) else f"-{OS_TO_QL_CLI_ASSET_NAME.get(platform_os)}"}'
@@ -412,7 +407,6 @@ def get_release_asset(asset: Dict,
                       dryrun: bool = False,
                       download_path: Optional[str] = None) -> bool:
     """Grab an asset based on the metadata."""
-
     try:
         headers = CaseInsensitiveDict(
             {"Accept": asset.get("content_type", "*")})
@@ -447,10 +441,11 @@ def http_query(
         data: Any = None,
         json_data: Any = None,
         download_path: Optional[str] = None) -> Union[bool, Dict, bytes, None]:
-    """Download the content of a URI, with optional headers, name and size.
+    """
+    Download the content of a URI, with optional headers, name and size.
+
     Can do a file download, straight content download, or a JSON decode.
     """
-
     headers = CaseInsensitiveDict({} if headers is None else headers)
     session = requests.session() if session is None else session
     headers.update(session.headers)  # type: ignore
@@ -561,7 +556,6 @@ def query_cli(tag: str,
               token: Optional[str] = None,
               download_path: Optional[str] = None) -> Optional[str]:
     """Query the CLI releases and get one if required."""
-
     get_cli = GitHubApi(CODEQL_OWNER, CODEQL_BINARIES_REPO, session, token)
 
     if list_tags:
@@ -619,7 +613,6 @@ def query_lib(lib_tag: Optional[str],
               token: Optional[str] = None,
               download_path: Optional[str] = None) -> Optional[str]:
     """Query the CodeQL library tags and get one if required."""
-
     get_libs = GitHubApi(CODEQL_OWNER, CODEQL_LIBRARIES_REPO, session, token)
 
     if list_tags:
@@ -675,6 +668,7 @@ def query_vscode(vscode_version: Optional[str],
                  dry_run: bool = False,
                  download_path: Optional[str] = None) -> bool:
     """Discover available versions of VSCode and get selected version or 'latest'.
+
         Based on https://code.visualstudio.com/Download and
     https://code.visualstudio.com/docs/supporting/faq#_previous-release-versions
     """
@@ -939,7 +933,7 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
 
 
 def run(args: Namespace) -> None:
-    """Main function."""
+    """Run the application."""
     session = Session()
     token: Optional[
         str] = args.github_token if args.github_token is not None else os.environ.get(

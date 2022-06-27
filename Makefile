@@ -12,6 +12,7 @@ lint:
 	python3 -m bandit --recursive --quiet .
 	python3 -m safety check --bare
 	python3 -m mypy .
+	python3 -m pydocstyle .
 
 clean:
 	-rm *.zip *.vsix *.whl
