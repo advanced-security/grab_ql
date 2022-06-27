@@ -2,6 +2,7 @@ all: lint install
 .PHONY: lint install clean
 
 install:
+	make lint
 	python3 -m build
 	find . -type f -name "grab_codeql-*.whl" -exec python3 -m pip install --force-reinstall {} \;
 
