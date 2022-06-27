@@ -348,6 +348,7 @@ class MarketPlaceApi():
             return None
 
     def get(self, name: str, version: str) -> bool:
+        """Download Vsix for given name/version."""
         if version not in self.versions(name):
             LOG.error("Version %s not found for %s", version, name)
             LOG.error(self.versions(name))
@@ -773,6 +774,7 @@ def query_vscode(vscode_version: Optional[str],
 
 
 def distro_normalise(platform_os: str) -> Optional[str]:
+    """Normalize platform into selected distributable packages."""
     if platform_os == WINDOWS_OS:
         return VSCODE_WINDOWS_USER
     if platform_os == LINUX_OS:
@@ -803,6 +805,7 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
                            dry_run: bool = False,
                            no_vscode_extension: bool = False,
                            list_tags: bool = False) -> bool:
+    """Query and/or get the VSCode QL extension."""
     if no_vscode_extension:
         return True
 
