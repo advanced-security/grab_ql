@@ -1,5 +1,5 @@
 all: lint install
-.PHONY: lint install clean
+.PHONY: lint install clean bin
 
 install:
 	make lint
@@ -16,5 +16,12 @@ lint:
 	python3 -m pydocstyle .
 	-python3 -m vulture .
 
+bin:
+	echo "Ensure that the version of python3 is a CPython distribution to build a binary"
+	python3 -m pip install nuitka
+	python3 -m pip install -r requirements.txt
+	python3 -m pip install orderedset zstandard
+	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
+
 clean:
-	-rm *.zip *.vsix *.whl
+	-rm *.zip *.vsix *.whl *.bin
