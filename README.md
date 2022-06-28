@@ -47,7 +47,7 @@ Clone this repository and install from source:
 
 ``` bash
 git clone <repo url>
-cd grab_codeql
+cd grab_ql
 make && make install
 ```
 
@@ -55,7 +55,7 @@ If you don't have GNU Make, you can instead use:
 
 ``` bash
 git clone <repo url>
-cd grab_codeql
+cd grab_ql
 python3 -m pip install build
 python3 -m build
 python3 -m pip install ./dist/grab_codeql-*.whl
