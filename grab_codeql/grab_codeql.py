@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote_plus, urljoin  # constructing URLs
 
 # from PyPi
-import distro  # to identify Linux distributions
+import distro  # type: ignore
 import requests  # to do web requests
 from dateutil.parser import isoparse  # to parse dates in the releases
 from packaging import version  # for semantic version comparison

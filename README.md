@@ -11,41 +11,97 @@ Grabs some or all of:
 
 You can get the latest version, or a specific version of each.
 
+## Usage
+
+`grab-codeql`: will attempt to get:
+
+1. the CodeQL release binary
+2. the CodeQL library
+3. Visual Studio Code (VSCode)
+4. the VSCode CodeQL (QL) extension
+
+all for the current platform.
+
+You can provide switches to change how it works.
+
+Use `grab-codeql --help` for more usage after installation,
+or try `pydoc3 grab_codeql.grab_codeql` if you installed the Python module.
+
 ## Installation
 
+You have a few options for installation.
+
+### 1. Python wheel
+
+Get the Python wheel from the releases for this repository, then install it:
+
 ``` bash
-make install
+python3 -m pip install grab_codeql-<version>-py3-none-any.whl
 ```
 
-or
+### 2. Clone and install from source
+
+This relies on Python 3.8+ and pip.
+
+Clone this repository and install from source:
 
 ``` bash
+git clone <repo url>
+cd grab_codeql
+make && make install
+```
+
+If you don't have GNU Make, you can instead use:
+
+``` bash
+git clone <repo url>
+cd grab_codeql
+python3 -m pip install build
 python3 -m build
-python3 -m pip install <wheel name>.whl
+python3 -m pip install ./dist/grab_codeql-*.whl
 ```
+
+This will install both the Python module and a CLI shortcut, both named `grab_codeql`.
+
+### 3. MacOS 12.0 ARM binary release
+
+Get the binary release from this repository, then run it:
+
+  ``` bash
+  chmod +x grab_codeql.bin
+  ./grab_codeql.bin
+  ```
 
 ## Dependencies
 
-* Python 3.x
-* Pip
-* Python dependencies via PyPi (see `requirements.txt`)
+Running grab_codeql relies on:
+
+* Python 3.8+
+  * you can also use a standalone binary distributable on MacOS (see above)
 * web connection
   * to use the [GitHub API](https://docs.github.com/en/rest/guides/getting-started-with-the-rest-api), [MarketPlace](https://marketplace.visualstudio.com/) API, and to download installer files
 * Optionally: HomeBrew (on MacOS, Linux or WSL)
 
 ## Build dependencies
 
-* `build` python module from PyPi
+* Python 3.8+
+* Pip and PyPi
+* Python dependencies via PyPi (see `requirements.txt` and `dev-requirements.txt`)
+
+or, to build a binary:
+
+* `nuitka` python module from PyPi, and dependencies:
+  * `orderedset zstandard` from PyPi
+* Cython Python 3.8+
+* Pip and PyPi
+* Python dependencies via PyPi (see `requirements.txt` and `dev-requirements.txt`)
+* a supported compiler for your platform
+
+Build the release binary with `make bin`.
 
 ## Development dependencies
 
 * Python dependencies via PyPi (see `dev-requirements.txt`)
-
-## Usage
-
-`grab-codeql`: will attempt to get the CodeQL release binary, library, VSCode and the VSCode QL extension for the current platform.
-
-Use `grab-codeql --help` after installation, or try `pydoc3 grab_codeql.grab_codeql`
 
 ## Acknowledgments
 

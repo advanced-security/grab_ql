@@ -1,12 +1,16 @@
-all: lint install
+all: lint build
 .PHONY: lint install clean bin
 
-install:
+build:
 	make lint
+	python3 -m pip -q install build
 	python3 -m build
-	find . -type f -name "grab_codeql-*.whl" -exec python3 -m pip install --force-reinstall {} \;
+
+install:
+	find . -type f -name "grab_codeql-*.whl" -exec python3 -m pip install -q --force-reinstall {} \;
 
 lint:
+	python3 -m pip install -q -r dev-requirements.txt
 	python3 -m yapf --in-place --style=google --recursive .
 	python3 -m isort .
 	python3 -m flake8 --max-line-length 120 --ignore=E251,W503,W504 .
@@ -17,11 +21,11 @@ lint:
 	-python3 -m vulture .
 
 bin:
-	echo "Ensure that the version of python3 is a CPython distribution to build a binary"
-	python3 -m pip install nuitka
-	python3 -m pip install -r requirements.txt
-	python3 -m pip install orderedset zstandard
+	@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary"
+	python3 -m pip -q install -r requirements.txt
+	python3 -m pip -q install -r nuitka-requirements.txt
 	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
 
 clean:
-	-rm *.zip *.vsix *.whl *.bin
+	-rm *.zip *.vsix grab_codeql.bin
+	-rm -rf ./dist/ ./grab_codeql.build/ ./grab_codeql.dist/ ./grab_codeql.egg-info/ ./grab_codeql.onefile-build
