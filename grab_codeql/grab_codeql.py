@@ -17,10 +17,11 @@ from argparse import ArgumentParser, Namespace
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote_plus, urljoin  # constructing URLs
 
+# from PyPi
 import distro  # to identify Linux distributions
 import requests  # to do web requests
-# from PyPi
 from dateutil.parser import isoparse  # to parse dates in the releases
+from packaging import version  # for semantic version comparison
 from requests import JSONDecodeError, Session
 from requests.structures import CaseInsensitiveDict
 from tqdm import tqdm  # for a progress bar
@@ -63,12 +64,22 @@ CODEQL_OWNER = "github"
 GITHUB_API_BASE = "https://api.github.com/"
 GITHUB_REPOS_PATH = "repos"
 GITHUB_JSON_ACCEPT_STRING = "application/vnd.github.v3+json"
+CODEQL_BINARY_SUPPORTS_M1_VERSION = "2.7.1"
 
 HTTP_GET = "GET"
 HTTP_POST = "POST"
 HTTP_FORBIDDEN = 403
 RATE_LIMIT_MSG = "rate limit exceeded"
 WARNING_THRESHOLD = 10
+
+HTTP_HEADER_XRATELIMIT = "X-RateLimit-Limit"
+HTTP_HEADER_XRATELIMIT_REMAINING = "X-RateLimit-Remaining"
+HTTP_HEADER_CONTENT_DISPOSITION = "Content-Disposition"
+HTTP_HEADER_CONTENT_LENGTH = "Content-Length"
+HTTP_HEADER_CONTENT_TYPE = "Content-Type"
+HTTP_HEADER_ACCEPT = "Accept"
+HTTP_HEADER_ACCEPT_ENCODING = "Accept-Encoding"
+HTTP_HEADER_AUTHORIZATION = "Authorization"
 
 VSCODE_LATEST = "latest"
 VSCODE_WINDOWS = "win32"
@@ -109,7 +120,6 @@ MARKETPLACE_INCLUDE_VERSIONS_FLAG = 0x01
 MARKETPLACE_EXCLUDE_NONVALIDATED_FLAG = 0x20
 MARKETPLACE_INCLUDE_FILES_FLAG = 0x02
 
-MARKETPLACE_FILTERTYPE_EXTENSION_ID = 4
 MARKETPLACE_FILTERTYPE_EXTENSION_NAME = 7
 MARKETPLACE_FILTERTYPE_TARGET = 8
 
@@ -156,12 +166,12 @@ class GitHubApi():
         self._download_path = download_path
 
         self._headers = CaseInsensitiveDict({
-            "Accept": GITHUB_JSON_ACCEPT_STRING,
+            HTTP_HEADER_ACCEPT: GITHUB_JSON_ACCEPT_STRING,
         })
 
         if token is not None and len(token) > 0:
             self._headers.update(
-                CaseInsensitiveDict({"Authorization": f"token {token}"}))
+                CaseInsensitiveDict({HTTP_HEADER_AUTHORIZATION: f"token {token}"}))
 
         self._session = requests.session() if session is None else session
 
@@ -272,9 +282,9 @@ class MarketPlaceApi():
         """Init API."""
         self._uri = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=3.0-preview.1"
         self._headers = CaseInsensitiveDict({
-            "content-type": "application/json",
-            "accept": "application/json; api-version=3.0-preview.1",
-            "accept-encoding": "gzip"
+            HTTP_HEADER_CONTENT_TYPE: "application/json",
+            HTTP_HEADER_ACCEPT: "application/json; api-version=3.0-preview.1",
+            HTTP_HEADER_ACCEPT_ENCODING: "gzip"
         })
         self._session = session
         self.dry_run = dry_run
@@ -408,7 +418,7 @@ def get_release_asset(asset: Dict,
     """Grab an asset based on the metadata."""
     try:
         headers = CaseInsensitiveDict(
-            {"Accept": asset.get("content_type", "*")})
+            {HTTP_HEADER_ACCEPT: asset.get(HTTP_HEADER_CONTENT_TYPE, "*")})
         size = asset.get("size", 0)
         uri = asset["browser_download_url"]
         name = asset.get("name", None)
@@ -425,6 +435,15 @@ def get_release_asset(asset: Dict,
                      dry_run=dryrun,
                      download_path=download_path)
     return bool(res)
+
+
+def semantic_lt(tag: str, base_tag: str) -> bool:
+    """Report if the given tag is less than the base tag."""
+    try:
+        return version.parse(tag) < version.parse(base_tag)
+    except (ValueError, version.InvalidVersion) as err:
+        LOG.error("Malformed versions: %s vs %s: %s", tag, base_tag, err)
+        return False
 
 
 def http_query(
@@ -454,13 +473,13 @@ def http_query(
     response = session.send(prep, stream=file_download or dry_run)
 
     # read rate limit data out of headers
-    limit = response.headers.get("X-RateLimit-Limit")
-    remaining = response.headers.get("X-RateLimit-Remaining")
+    limit = response.headers.get(HTTP_HEADER_XRATELIMIT)
+    remaining = response.headers.get(HTTP_HEADER_XRATELIMIT_REMAINING)
 
     # read other metadata such as the filename out of headers
     # TODO: grab this!
     LOG.debug(response.headers)
-    content_disposition = response.headers.get("Content-Disposition")
+    content_disposition = response.headers.get(HTTP_HEADER_CONTENT_DISPOSITION)
     if content_disposition is not None:
         if content_disposition.startswith("attachment; filename="):
             name = content_disposition.split(
@@ -487,7 +506,7 @@ def http_query(
         return False
 
     try:
-        total_length = int(response.headers.get('content-length', 0))
+        total_length = int(response.headers.get(HTTP_HEADER_CONTENT_LENGTH, 0))
     except (ValueError, TypeError):
         LOG.debug("Malformed content-length header")
         total_length = None
@@ -581,7 +600,18 @@ def query_cli(tag: str,
     LOG.info("CLI tag is %s, getting for platform %s/%s/%s", cli_tag,
              platform_os, machine, bits)
 
-    # TODO: check if we want macos, arm - if so, check release is >= RELEASE_THAT_SUPPORTED_ARM
+    if cli_tag is None:
+        LOG.error("CLI tag is not present in CLI release metadata: %s", item)
+        return None
+
+    # check if we want macos, arm - if so, check release is >= CODEQL_BINARY_SUPPORTS_M1_VERSION
+    # https://github.com/github/codeql-cli-binaries/blob/HEAD/CHANGELOG.md
+    if platform_os == MACOS_OS and machine == MACHINE_ARM:
+        if semantic_lt(cli_tag, CODEQL_BINARY_SUPPORTS_M1_VERSION):
+            LOG.error(
+                "🔥 This version of the CLI binary does not support the M-series chip. Please choose a newer version."
+            )
+            return None
 
     LOG.debug(json.dumps(item, indent=2))
 
