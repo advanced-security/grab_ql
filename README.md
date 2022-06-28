@@ -2,25 +2,13 @@
 
 Get, set up and debug CodeQL CLI and VSCode CodeQL extension.
 
-Grabs some or all of:
-
-* [CodeQL CLI binary release](https://github.com/github/codeql-cli-binaries)
-* [CodeQL QL libraries](https://github.com/github/codeql)
-* [VSCode](https://code.visualstudio.com/)
-* [VSCode CodeQL extension](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql)
+Grabs some or all of the [CodeQL CLI binary](https://github.com/github/codeql-cli-binaries), [the QL libraries](https://github.com/github/codeql), [VSCode](https://code.visualstudio.com/) and the [VSCode CodeQL extension](https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql).
 
 You can get the latest version, or a specific version of each.
 
 ## Usage
 
-`grab-codeql`: will attempt to get:
-
-1. the CodeQL release binary
-2. the CodeQL library
-3. Visual Studio Code (VSCode)
-4. the VSCode CodeQL (QL) extension
-
-all for the current platform.
+`grab-codeql`: will attempt to get the CodeQL and VSCode packages listed above, all for the current platform.
 
 You can provide switches to change how it works.
 
