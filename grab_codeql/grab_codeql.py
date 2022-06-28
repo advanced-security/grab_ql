@@ -2,7 +2,7 @@
 """
 Grab, update and optionally package CodeQL binaries and libraries.
 
-Written with 💖 and 🐍 by @aegilops, Field Security Services, GitHub Advanced Security
+Author: @aegilops, Field Security Services, GitHub Advanced Security
 """
 
 import json
@@ -22,8 +22,8 @@ import distro  # to identify Linux distributions
 import requests  # to do web requests
 from dateutil.parser import isoparse  # to parse dates in the releases
 from packaging import version  # for semantic version comparison
-from requests import JSONDecodeError, Session
-from requests.structures import CaseInsensitiveDict
+from requests import JSONDecodeError, Session  # to do web requests
+from requests.structures import CaseInsensitiveDict  # for HTTP headers
 from tqdm import tqdm  # for a progress bar
 
 DESCRIPTION = "Grab, update and optionally package CodeQL binaries and libraries"
@@ -119,12 +119,9 @@ VSCODE_HOMEBREW_FAILED_MSG = "Failed to install VSCode via HomeBrew. Falling bac
 MARKETPLACE_INCLUDE_VERSIONS_FLAG = 0x01
 MARKETPLACE_EXCLUDE_NONVALIDATED_FLAG = 0x20
 MARKETPLACE_INCLUDE_FILES_FLAG = 0x02
-
 MARKETPLACE_FILTERTYPE_EXTENSION_NAME = 7
 MARKETPLACE_FILTERTYPE_TARGET = 8
-
 MARKETPLACE_ASSETTYPE_VSIX = "Microsoft.VisualStudio.Services.VSIXPackage"
-
 MARKETPLACE_VSCODE_TARGET = "Microsoft.VisualStudio.Code"
 MARKETPLACE_CODEQL_FQNAME = "GitHub.vscode-codeql"
 
@@ -171,7 +168,8 @@ class GitHubApi():
 
         if token is not None and len(token) > 0:
             self._headers.update(
-                CaseInsensitiveDict({HTTP_HEADER_AUTHORIZATION: f"token {token}"}))
+                CaseInsensitiveDict(
+                    {HTTP_HEADER_AUTHORIZATION: f"token {token}"}))
 
         self._session = requests.session() if session is None else session
 
