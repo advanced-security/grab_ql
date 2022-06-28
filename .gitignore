@@ -6,3 +6,7 @@ workspace.code-workspace
 dist/
 *.egg-info/
 .mypy_cache/
+*.build/
+*.dist/
+*.onefile-build/
+*.bin
