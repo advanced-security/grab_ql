@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grab_codeql"
-version = "0.0.1"
+version = "0.0.2b0"
 dependencies = [
     'importlib-metadata; python_version>"3.8"',
     "requests>=2.28.0",

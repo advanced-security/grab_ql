@@ -576,6 +576,7 @@ def query_cli(tag: str,
 
     if list_tags:
         print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
+        return None
 
     cli_tag = None
 
@@ -644,6 +645,7 @@ def query_lib(lib_tag: Optional[str],
 
     if list_tags:
         print(f"CodeQL library tags: {get_libs.tag_names()}")
+        return None
 
     if no_lib:
         return None
@@ -693,7 +695,8 @@ def query_vscode(vscode_version: Optional[str],
                  macos_installer: str = None,
                  no_vscode: bool = False,
                  dry_run: bool = False,
-                 download_path: Optional[str] = None) -> bool:
+                 download_path: Optional[str] = None,
+                 list_tags: bool = False) -> bool:
     """Discover available versions of VSCode and get selected version or 'latest'.
 
         Based on https://code.visualstudio.com/Download and
@@ -741,6 +744,12 @@ def query_vscode(vscode_version: Optional[str],
     # TODO: check SHA256 on VSCode d/l page?
 
     if no_vscode:
+        return False
+
+    if list_tags:
+        print(
+            "Please visit https://code.visualstudio.com/updates/ for release versions of VSCode."
+        )
         return False
 
     # TODO: allow getting all o/s, bits, machines
@@ -942,7 +951,10 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
                                  download_path=download_path)
 
     if list_tags:
-        LOG.info(marketplace.versions(MARKETPLACE_CODEQL_FQNAME))
+        print(
+            f"VSCode extension versions: {marketplace.versions(MARKETPLACE_CODEQL_FQNAME)}"
+        )
+        return False
 
     # find "latest"
     if vscode_extension_version is None:
@@ -980,7 +992,7 @@ def run(args: Namespace) -> None:
                                        token=token,
                                        download_path=args.download_path)
 
-    if not args.no_cli and cli_tag is None:
+    if not args.list_tags and not args.no_cli and cli_tag is None:
         LOG.error("Failed to get/query CLI releases. "
                   "Please report the error, "
                   "try https://github.com/github/codeql-cli-binaries/releases"
@@ -996,7 +1008,7 @@ def run(args: Namespace) -> None:
                                        token=token,
                                        download_path=args.download_path)
 
-    if not args.no_lib and lib_tag is None:
+    if not args.list_tags and not args.no_lib and lib_tag is None:
         LOG.error("Failed to get/query CodeQL library. "
                   "Please report the error, "
                   "try https://github.com/github/codeql/"
@@ -1013,9 +1025,10 @@ def run(args: Namespace) -> None:
         macos_installer=args.vscode_macos_installer,
         no_vscode=args.no_vscode,
         dry_run=args.dry_run,
-        download_path=args.download_path)
+        download_path=args.download_path,
+        list_tags=args.list_tags)
 
-    if not args.dry_run and not args.no_vscode and vscode_version_download is None:
+    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_version_download is None:
         LOG.error("VSCode download failed. "
                   "Please report the error, "
                   "try https://code.visualstudio.com/Download"
@@ -1026,9 +1039,10 @@ def run(args: Namespace) -> None:
         session,
         no_vscode_extension=args.no_vscode_ext,
         dry_run=args.dry_run,
-        download_path=args.download_path)
+        download_path=args.download_path,
+        list_tags=args.list_tags)
 
-    if not args.dry_run and not args.no_vscode_ext and vscode_extension_version_download is None:
+    if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_extension_version_download is None:
         LOG.error(
             "VSCode extension download failed. "
             "Please report the error, "
