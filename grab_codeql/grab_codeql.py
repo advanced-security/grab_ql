@@ -572,7 +572,11 @@ def query_cli(tag: str,
               token: Optional[str] = None,
               download_path: Optional[str] = None) -> Optional[str]:
     """Query the CLI releases and get one if required."""
-    get_cli = GitHubApi(CODEQL_OWNER, CODEQL_BINARIES_REPO, session, token, download_path=download_path)
+    get_cli = GitHubApi(CODEQL_OWNER,
+                        CODEQL_BINARIES_REPO,
+                        session,
+                        token,
+                        download_path=download_path)
 
     if list_tags:
         print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
@@ -840,7 +844,9 @@ def query_vscode(vscode_version: Optional[str],
         else:
             cached_path = ret.stdout.decode('utf-8').strip()
             LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-            target = shutil.copy2(cached_path, download_path)
+            target = shutil.copy2(
+                cached_path,
+                download_path if download_path is not None else os.getcwd())
             LOG.info("VSCode Homebrew installer at %s", target)
             brew_ok = True
 
