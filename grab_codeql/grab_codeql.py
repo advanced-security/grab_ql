@@ -625,7 +625,9 @@ def query_cli(tag: str,
         asset: Optional[Dict[str,
                              str]] = choose_release_asset(assets, platform_os)
         if asset is not None:
-            if not get_release_asset(asset, session, dryrun=dry_run):
+            if not get_release_asset(
+                    asset, session, dryrun=dry_run,
+                    download_path=download_path):
                 LOG.error("Failed to get release asset")
                 return None
     else:

@@ -1,4 +1,4 @@
-all: lint build
+all: build bin
 .PHONY: lint install clean bin
 
 build:
