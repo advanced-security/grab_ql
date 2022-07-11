@@ -362,19 +362,19 @@ class MarketPlaceApi():
             LOG.error("Failed to get latest item: %s", err)
             return None
 
-    def get(self, name: str, version: str) -> bool:
+    def get(self, name: str, version: str) -> Optional[str]:
         """Download Vsix for given name/version."""
         if version not in self.versions(name):
             LOG.error("Version %s not found for %s", version, name)
             LOG.error(self.versions(name))
-            return False
+            return None
         try:
             version_details = next((item for item in self._versions(name)
                                     if item.get("version") == version))
         except StopIteration:
             LOG.error("Unable to retrieve item metadata for %s/v%s", name,
                       version)
-            return False
+            return None
 
         try:
             file_to_get_uri = next(
@@ -386,13 +386,16 @@ class MarketPlaceApi():
 
         LOG.debug(file_to_get_uri)
 
-        res = http_query(file_to_get_uri,
-                         name=f"{name}_{version}.vsix",
-                         session=self._session,
-                         file_download=True,
-                         dry_run=self.dry_run,
-                         download_path=self._download_path)
-        return bool(res)
+        filename = http_query(file_to_get_uri,
+                              name=f"{name}_{version}.vsix",
+                              session=self._session,
+                              file_download=True,
+                              dry_run=self.dry_run,
+                              download_path=self._download_path)
+
+        if isinstance(filename, str):
+            return filename
+        return None
 
 
 def choose_release_asset(assets: List[Dict[str, str]],
@@ -412,7 +415,7 @@ def choose_release_asset(assets: List[Dict[str, str]],
 def get_release_asset(asset: Dict,
                       session: Optional[Session] = None,
                       dryrun: bool = False,
-                      download_path: Optional[str] = None) -> bool:
+                      download_path: Optional[str] = None) -> Optional[str]:
     """Grab an asset based on the metadata."""
     try:
         headers = CaseInsensitiveDict(
@@ -422,17 +425,20 @@ def get_release_asset(asset: Dict,
         name = asset.get("name", None)
     except KeyError as err:
         LOG.error("Didn't find expected key in asset results: %s", err)
-        return False
+        return None
 
-    res = http_query(uri,
-                     session=session,
-                     headers=headers,
-                     name=name,
-                     size=size,
-                     file_download=True,
-                     dry_run=dryrun,
-                     download_path=download_path)
-    return bool(res)
+    filename = http_query(uri,
+                          session=session,
+                          headers=headers,
+                          name=name,
+                          size=size,
+                          file_download=True,
+                          dry_run=dryrun,
+                          download_path=download_path)
+
+    if isinstance(filename, str):
+        return filename
+    return None
 
 
 def semantic_lt(tag: str, base_tag: str) -> bool:
@@ -456,7 +462,8 @@ def http_query(
         method: str = HTTP_GET,
         data: Any = None,
         json_data: Any = None,
-        download_path: Optional[str] = None) -> Union[bool, Dict, bytes, None]:
+        download_path: Optional[str] = None
+) -> Union[bool, Dict, bytes, str, None]:
     """
     Download the content of a URI, with optional headers, name and size.
 
@@ -475,13 +482,12 @@ def http_query(
     remaining = response.headers.get(HTTP_HEADER_XRATELIMIT_REMAINING)
 
     # read other metadata such as the filename out of headers
-    # TODO: grab this!
     LOG.debug(response.headers)
     content_disposition = response.headers.get(HTTP_HEADER_CONTENT_DISPOSITION)
     if content_disposition is not None:
         if content_disposition.startswith("attachment; filename="):
             name = content_disposition.split(
-                "=", maxsplit=1)[1].strip('"').strip("'")
+                "=", maxsplit=1)[1].strip('"').strip("'").strip("`").strip()
 
     if limit is not None:
         try:
@@ -527,6 +533,8 @@ def http_query(
             try:
                 # yapf: disable
                 pb: Any
+                filename: Optional[str] = None
+
                 with open(
                     os.path.join(download_path, name) if download_path is not None else name,
                     "wb"
@@ -540,11 +548,14 @@ def http_query(
                     unit_divisor=1024,
                 ) as pb:
                     # yapf: enable
+                    filename = item.name
+
                     response_data: bytes
                     for response_data in response.iter_content(chunk_size=4096):
                         item.write(response_data)
                         pb.update(len(response_data))
-                return True
+                LOG.debug("Got %s", filename)
+                return filename
             except KeyboardInterrupt:
                 LOG.debug("Stopping download")
                 return False
@@ -561,16 +572,18 @@ def http_query(
         return False
 
 
-def query_cli(tag: str,
-              session: Session,
-              platform_os: str,
-              bits: str,
-              machine: str,
-              list_tags: bool = False,
-              no_cli: bool = False,
-              dry_run: bool = False,
-              token: Optional[str] = None,
-              download_path: Optional[str] = None) -> Optional[str]:
+def query_cli(
+        tag: str,
+        session: Session,
+        platform_os: str,
+        bits: str,
+        machine: str,
+        list_tags: bool = False,
+        no_cli: bool = False,
+        dry_run: bool = False,
+        token: Optional[str] = None,
+        download_path: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
     """Query the CLI releases and get one if required."""
     get_cli = GitHubApi(CODEQL_OWNER,
                         CODEQL_BINARIES_REPO,
@@ -580,23 +593,23 @@ def query_cli(tag: str,
 
     if list_tags:
         print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
-        return None
+        return (None, None)
 
     cli_tag = None
 
     if no_cli:
-        return None
+        return (None, None)
 
     if bits == BITS_32:
         LOG.error("🔥 No CodeQL releases are available for 32 bit")
-        return None
+        return (None, None)
 
     item = get_cli.release(tag)
 
     if item is None:
         LOG.error("Error getting metadata for CLI release: %s",
                   "latest" if tag is None else tag)
-        return None
+        return (None, None)
 
     cli_tag = item.get("tag_name")
 
@@ -605,7 +618,7 @@ def query_cli(tag: str,
 
     if cli_tag is None:
         LOG.error("CLI tag is not present in CLI release metadata: %s", item)
-        return None
+        return (None, None)
 
     # check if we want macos, arm - if so, check release is >= CODEQL_BINARY_SUPPORTS_M1_VERSION
     # https://github.com/github/codeql-cli-binaries/blob/HEAD/CHANGELOG.md
@@ -614,7 +627,7 @@ def query_cli(tag: str,
             LOG.error(
                 "🔥 This version of the CLI binary does not support the M-series chip. Please choose a newer version."
             )
-            return None
+            return (None, None)
 
     LOG.debug(json.dumps(item, indent=2))
 
@@ -625,36 +638,40 @@ def query_cli(tag: str,
         asset: Optional[Dict[str,
                              str]] = choose_release_asset(assets, platform_os)
         if asset is not None:
-            if not get_release_asset(
-                    asset, session, dryrun=dry_run,
-                    download_path=download_path):
+            cli_filename = get_release_asset(asset,
+                                             session,
+                                             dryrun=dry_run,
+                                             download_path=download_path)
+            if cli_filename is None:
                 LOG.error("Failed to get release asset")
-                return None
+                return (None, None)
     else:
         LOG.error("Failed to locate assets")
-        return None
+        return (None, None)
 
-    return cli_tag
+    return (cli_tag, cli_filename)
 
 
-def query_lib(lib_tag: Optional[str],
-              session: Session,
-              archive_type: str,
-              cli_tag: str = None,
-              list_tags: bool = False,
-              no_lib: bool = False,
-              dry_run: bool = False,
-              token: Optional[str] = None,
-              download_path: Optional[str] = None) -> Optional[str]:
+def query_lib(
+        lib_tag: Optional[str],
+        session: Session,
+        archive_type: str,
+        cli_tag: str = None,
+        list_tags: bool = False,
+        no_lib: bool = False,
+        dry_run: bool = False,
+        token: Optional[str] = None,
+        download_path: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
     """Query the CodeQL library tags and get one if required."""
     get_libs = GitHubApi(CODEQL_OWNER, CODEQL_LIBRARIES_REPO, session, token)
 
     if list_tags:
         print(f"CodeQL library tags: {get_libs.tag_names()}")
-        return None
+        return (None, None)
 
     if no_lib:
-        return None
+        return (None, None)
 
     if cli_tag is not None or lib_tag is not None:
         lib_tag = f"codeql-cli/{cli_tag if lib_tag is None else lib_tag}"
@@ -665,7 +682,7 @@ def query_lib(lib_tag: Optional[str],
             lib_tag = f"codeql-cli/{latest.get('tag_name')}"
         else:
             LOG.error("Could not get latest library version")
-            return None
+            return (None, None)
 
     LOG.info("Library tag is %s", lib_tag)
 
@@ -673,22 +690,25 @@ def query_lib(lib_tag: Optional[str],
 
     if item is None:
         LOG.error("Error getting tag: %s", lib_tag)
-        return None
+        return (None, None)
 
     LOG.debug(json.dumps(item, indent=2))
 
     url_key = f"{archive_type}ball_url"
     uri = item.get(url_key)
     if uri is not None:
-        if not http_query(uri,
-                          session=session,
-                          file_download=True,
-                          dry_run=dry_run,
-                          download_path=download_path):
+        filename = http_query(uri,
+                              session=session,
+                              file_download=True,
+                              dry_run=dry_run,
+                              download_path=download_path)
+        if filename is None or not isinstance(filename, str):
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
-            return None
+            return (None, None)
 
-    return lib_tag
+        return (lib_tag, filename)
+
+    return (None, None)
 
 
 def query_vscode(vscode_version: Optional[str],
@@ -702,7 +722,7 @@ def query_vscode(vscode_version: Optional[str],
                  no_vscode: bool = False,
                  dry_run: bool = False,
                  download_path: Optional[str] = None,
-                 list_tags: bool = False) -> bool:
+                 list_tags: bool = False) -> Optional[str]:
     """Discover available versions of VSCode and get selected version or 'latest'.
 
         Based on https://code.visualstudio.com/Download and
@@ -750,30 +770,30 @@ def query_vscode(vscode_version: Optional[str],
     # TODO: check SHA256 on VSCode d/l page?
 
     if no_vscode:
-        return False
+        return None
 
     if list_tags:
         print(
             "Please visit https://code.visualstudio.com/updates/ for release versions of VSCode."
         )
-        return False
+        return None
 
     # TODO: allow getting all o/s, bits, machines
     if platform_os == ALL_OS:
         LOG.error("Please select a specific OS to retrieve VSCode,"
                   "this downloader will not get all versions (yet)")
-        return False
+        return None
 
     if platform_os in (WINDOWS_OS, LINUX_OS) and bits == ALL_BITS:
         LOG.error("Please select a specific bit width to retrieve VSCode,"
                   "this downloader will not get all types (yet)")
-        return False
+        return None
 
     if machine == ALL_MACHINES:
         LOG.error(
             "Please select a specific machine architecture to retrieve VSCode,"
             "this downloader will not get all types (yet)")
-        return False
+        return None
 
     vscode_version = VSCODE_LATEST if vscode_version is None else vscode_version
     track = VSCODE_STABLE
@@ -785,7 +805,7 @@ def query_vscode(vscode_version: Optional[str],
             # TODO: was this ever not true?
             LOG.error(
                 "VSCode is not available for this OS on 32 bit ARM, sorry.")
-            return False
+            return None
     # TODO: it isn't now, but was it ever?
     # if vscode_os == VSCODE_LINUX:
     #     if bits == BIT_32:
@@ -795,7 +815,7 @@ def query_vscode(vscode_version: Optional[str],
     brew_fetch_args = [
         "fetch", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
     ]
-    brew_binary = None
+    brew_binary: Optional[str] = None
     brew_ok: bool = False
 
     if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_DISTRO_BREW:
@@ -846,7 +866,7 @@ def query_vscode(vscode_version: Optional[str],
         else:
             cached_path = ret.stdout.decode('utf-8').strip()
             LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-            target = shutil.copy2(
+            brew_binary = shutil.copy2(
                 cached_path,
                 download_path if download_path is not None else os.getcwd())
             LOG.info("VSCode Homebrew installer at %s", target)
@@ -857,7 +877,7 @@ def query_vscode(vscode_version: Optional[str],
             linux_installer = None
             macos_installer = None
         else:
-            return True
+            return str(brew_binary)
 
     platform_parts: List[str] = []
     platform_parts.append(vscode_os)
@@ -905,16 +925,15 @@ def query_vscode(vscode_version: Optional[str],
 
     uri: str = f"{VSCODE_DOWNLOAD_BASE}/{quote_plus(vscode_version)}/{quote_plus(platform_string)}/{quote_plus(track)}"
 
-    if not http_query(uri,
-                      session,
-                      file_download=True,
-                      dry_run=dry_run,
-                      download_path=download_path):
-        LOG.error("Failed to download for %s/%s/%sbit", platform_os, machine,
-                  bits)
-        return False
-
-    return True
+    filename = http_query(uri,
+                          session,
+                          file_download=True,
+                          dry_run=dry_run,
+                          download_path=download_path)
+    if isinstance(filename, str):
+        return filename
+    LOG.error("Failed to download for %s/%s/%sbit", platform_os, machine, bits)
+    return None
 
 
 def distro_normalise(platform_os: str) -> Optional[str]:
@@ -944,15 +963,16 @@ def resolve_platform(platform_os: str, bits: str, machine: str,
     return resolved
 
 
-def query_vscode_extension(vscode_extension_version: Optional[str],
-                           session: Session = None,
-                           dry_run: bool = False,
-                           no_vscode_extension: bool = False,
-                           list_tags: bool = False,
-                           download_path: Optional[str] = None) -> bool:
+def query_vscode_extension(
+        vscode_extension_version: Optional[str],
+        session: Session = None,
+        dry_run: bool = False,
+        no_vscode_extension: bool = False,
+        list_tags: bool = False,
+        download_path: Optional[str] = None) -> Optional[str]:
     """Query and/or get the VSCode QL extension."""
     if no_vscode_extension:
-        return True
+        return None
 
     marketplace = MarketPlaceApi(session=session,
                                  dry_run=dry_run,
@@ -962,21 +982,23 @@ def query_vscode_extension(vscode_extension_version: Optional[str],
         print(
             f"VSCode extension versions: {marketplace.versions(MARKETPLACE_CODEQL_FQNAME)}"
         )
-        return False
+        return None
 
     # find "latest"
     if vscode_extension_version is None:
         vscode_extension = marketplace.latest(MARKETPLACE_CODEQL_FQNAME)
         LOG.debug(vscode_extension)
         if vscode_extension is None:
-            return False
+            return None
         vscode_extension_version = vscode_extension["version"]
 
-    if not marketplace.get(MARKETPLACE_CODEQL_FQNAME, vscode_extension_version):
-        LOG.error("Failed to get VSCode extension.")
-        return False
+    filename = marketplace.get(MARKETPLACE_CODEQL_FQNAME,
+                               vscode_extension_version)
+    if isinstance(filename, str):
+        return filename
 
-    return True
+    LOG.error("Failed to get VSCode extension.")
+    return None
 
 
 def run(args: Namespace) -> None:
@@ -989,16 +1011,19 @@ def run(args: Namespace) -> None:
     platform_os, bits, machine, distro = resolve_platform(
         args.os, args.bits, args.machine, args.vscode_linux_installer)
 
-    cli_tag: Optional[str] = query_cli(args.tag,
-                                       session,
-                                       platform_os,
-                                       bits,
-                                       machine,
-                                       list_tags=args.list_tags,
-                                       no_cli=args.no_cli,
-                                       dry_run=args.dry_run,
-                                       token=token,
-                                       download_path=args.download_path)
+    cli_tag: Optional[str]
+    cli_file: Optional[str]
+
+    cli_tag, cli_file = query_cli(args.tag,
+                                  session,
+                                  platform_os,
+                                  bits,
+                                  machine,
+                                  list_tags=args.list_tags,
+                                  no_cli=args.no_cli,
+                                  dry_run=args.dry_run,
+                                  token=token,
+                                  download_path=args.download_path)
 
     if not args.list_tags and not args.no_cli and cli_tag is None:
         LOG.error("Failed to get/query CLI releases. "
@@ -1006,15 +1031,21 @@ def run(args: Namespace) -> None:
                   "try https://github.com/github/codeql-cli-binaries/releases"
                   " or check the arguments you passed in.")
 
-    lib_tag: Optional[str] = query_lib(args.lib_tag,
-                                       session,
-                                       args.archive_type,
-                                       cli_tag=cli_tag,
-                                       list_tags=args.list_tags,
-                                       no_lib=args.no_lib,
-                                       dry_run=args.dry_run,
-                                       token=token,
-                                       download_path=args.download_path)
+    if cli_file is not None:
+        LOG.debug("Downloaded CLI to %s", cli_file)
+
+    lib_tag: Optional[str]
+    lib_file: Optional[str]
+
+    lib_tag, lib_file = query_lib(args.lib_tag,
+                                  session,
+                                  args.archive_type,
+                                  cli_tag=cli_tag,
+                                  list_tags=args.list_tags,
+                                  no_lib=args.no_lib,
+                                  dry_run=args.dry_run,
+                                  token=token,
+                                  download_path=args.download_path)
 
     if not args.list_tags and not args.no_lib and lib_tag is None:
         LOG.error("Failed to get/query CodeQL library. "
@@ -1022,7 +1053,10 @@ def run(args: Namespace) -> None:
                   "try https://github.com/github/codeql/"
                   " or check the arguments you passed in.")
 
-    vscode_version_download = query_vscode(
+    if lib_file is not None:
+        LOG.debug("Downloaded library to %s", lib_file)
+
+    vscode_file: Optional[str] = query_vscode(
         args.vscode_ver,
         session,
         platform_os,
@@ -1036,13 +1070,16 @@ def run(args: Namespace) -> None:
         download_path=args.download_path,
         list_tags=args.list_tags)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_version_download is None:
+    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
         LOG.error("VSCode download failed. "
                   "Please report the error, "
                   "try https://code.visualstudio.com/Download"
                   " or check the arguments you passed in.")
 
-    vscode_extension_version_download = query_vscode_extension(
+    if vscode_file is not None:
+        LOG.debug("Downloaded VSCode to %s", vscode_file)
+
+    vscode_ext_file: Optional[str] = query_vscode_extension(
         args.vscode_ext_ver,
         session,
         no_vscode_extension=args.no_vscode_ext,
@@ -1050,12 +1087,19 @@ def run(args: Namespace) -> None:
         download_path=args.download_path,
         list_tags=args.list_tags)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_extension_version_download is None:
+    if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None:
         LOG.error(
             "VSCode extension download failed. "
             "Please report the error, "
             "try https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql"
             " or check the arguments you passed in.")
+
+    if vscode_ext_file is not None:
+        LOG.debug("Downloaded VSCode CodeQL extension to %s", vscode_ext_file)
+
+    if args.install:
+        LOG.debug("Installing downloaded packages")
+        pass
 
 
 def add_arguments(parser: ArgumentParser) -> None:
@@ -1165,6 +1209,10 @@ def add_arguments(parser: ArgumentParser) -> None:
                         "--archive-type",
                         choices=(ARCHIVE_ZIP, ARCHIVE_TAR),
                         default=ARCHIVE_ZIP,
+                        help="Type of archive for CLI release")
+    parser.add_argument("-i",
+                        "--install",
+                        action="store_true",
                         help="Type of archive for CLI release")
 
 
