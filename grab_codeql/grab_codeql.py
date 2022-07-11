@@ -869,7 +869,7 @@ def query_vscode(vscode_version: Optional[str],
             brew_binary = shutil.copy2(
                 cached_path,
                 download_path if download_path is not None else os.getcwd())
-            LOG.info("VSCode Homebrew installer at %s", target)
+            LOG.info("VSCode Homebrew installer at %s", brew_binary)
             brew_ok = True
 
         if not brew_ok:
