@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.0.2b1 - unreleased
+
+### Added
+
+* Downloads: keep downloaded file name for future installer
+
 ## 0.0.2b0 - unreleased
 
 ### Added
