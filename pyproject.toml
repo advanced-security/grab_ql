@@ -4,17 +4,45 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grab_codeql"
-version = "0.0.2b1"
+version = "0.0.2"
 dependencies = [
     'importlib-metadata; python_version>"3.8"',
-    "requests>=2.28.0",
-    "python-dateutil>=2.8.2",
-    "tqdm>=4.64.0",
-    "distro>=1.3.0",
+    "requests==2.28.0",
+    "python-dateutil==2.8.2",
+    "tqdm==4.64.0",
+    "distro==1.3.0",
+]
+authors = [
+    { name = "Paul Hodgkinson", email = "aegilops@github.com" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: System :: Software Distribution",
 ]
 
 [project.scripts]
 grab-codeql = "grab_codeql.grab_codeql:main"
 
-
-
+[poetry.tool]
+dev-dependencies = [
+    "yapf==0.32.0",
+    "build==0.8.0",
+    "bandit==1.7.4",
+    "dlint==0.12.0",
+    "mypy==0.961",
+    "types-python-dateutil==2.8.18",
+    "types-requests==2.28.0",
+    "pydocstyle==6.1.1",
+    "vulture==2.4",
+    "isort==5.10.1",
+    "nuitka==0.9",
+    "orderedset==2.0.3",
+    "zstandard==0.18.0",
+]
+repository = "https://github.com/advanced-security/grab_ql"

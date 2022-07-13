@@ -12,7 +12,7 @@ Please use Python 3.8+, and use `make lint` to apply the coding standards. You c
 
 Use `make` to apply the linter and package the wheel.
 
-If you want to build the distributable binary, then please use `make nuitka`.
+If you want to build the distributable binary, then please use `make nuitka` on the platform you want the binary for.
 
 ## Submitting changes
 

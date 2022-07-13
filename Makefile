@@ -1,5 +1,5 @@
 all: build bin
-.PHONY: lint install clean bin
+.PHONY: build lint install clean bin
 
 build:
 	make lint
@@ -20,7 +20,8 @@ lint:
 	-python3 -m vulture .
 
 bin:
-	@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka"
+	@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."
+	@echo "NOTE: This will only build a binary for the platform you are using."
 	python3 -m pip -q install -r requirements.txt
 	python3 -m pip -q install -r nuitka-requirements.txt
 	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py

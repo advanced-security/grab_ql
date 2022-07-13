@@ -1027,9 +1027,9 @@ def run(args: Namespace) -> None:
 
     if not args.list_tags and not args.no_cli and cli_tag is None:
         LOG.error("Failed to get/query CLI releases. "
-                  "Please report the error, "
+                  "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql-cli-binaries/releases"
-                  " or check the arguments you passed in.")
+                  " or report the error in an issue.")
 
     if cli_file is not None:
         LOG.debug("Downloaded CLI to %s", cli_file)
@@ -1049,9 +1049,9 @@ def run(args: Namespace) -> None:
 
     if not args.list_tags and not args.no_lib and lib_tag is None:
         LOG.error("Failed to get/query CodeQL library. "
-                  "Please report the error, "
+                  "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql/"
-                  " or check the arguments you passed in.")
+                  " or report the error in an issue.")
 
     if lib_file is not None:
         LOG.debug("Downloaded library to %s", lib_file)
@@ -1072,9 +1072,9 @@ def run(args: Namespace) -> None:
 
     if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
         LOG.error("VSCode download failed. "
-                  "Please report the error, "
+                  "Please check the arguments you passed in, "
                   "try https://code.visualstudio.com/Download"
-                  " or check the arguments you passed in.")
+                  " or report the error in an issue.")
 
     if vscode_file is not None:
         LOG.debug("Downloaded VSCode to %s", vscode_file)
@@ -1090,16 +1090,18 @@ def run(args: Namespace) -> None:
     if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None:
         LOG.error(
             "VSCode extension download failed. "
-            "Please report the error, "
+            "Please check the arguments you passed in, "
             "try https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql"
-            " or check the arguments you passed in.")
+            " or report the error in an issue.")
 
     if vscode_ext_file is not None:
         LOG.debug("Downloaded VSCode CodeQL extension to %s", vscode_ext_file)
 
     if args.install:
         LOG.debug("Installing downloaded packages")
-        pass
+        raise NotImplementedError(
+            "Installing is not yet implemented, please install the downloaded files manually"
+        )
 
 
 def add_arguments(parser: ArgumentParser) -> None:
@@ -1210,10 +1212,11 @@ def add_arguments(parser: ArgumentParser) -> None:
                         choices=(ARCHIVE_ZIP, ARCHIVE_TAR),
                         default=ARCHIVE_ZIP,
                         help="Type of archive for CLI release")
-    parser.add_argument("-i",
-                        "--install",
-                        action="store_true",
-                        help="Type of archive for CLI release")
+    parser.add_argument(
+        "-i",
+        "--install",
+        action="store_true",
+        help="Install the downloaded files (NOT YET IMPLEMENTED)")
 
 
 def main() -> None:

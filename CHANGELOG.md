@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.0.2 - 2022-07-13
+
+### Changed
+
+* Setup: tidied up `pyproject.toml`
+* Switches: marked `--install` as not implemented in argument help and raises error
+* Error messages: switched order of advice on handling errors (check args first)
+* Contributing: noted that `nuitka` only builds for the current platform
+
 ## 0.0.2b1 - unreleased
 
 ### Added
