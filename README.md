@@ -6,6 +6,8 @@ It grabs some or all of the [CodeQL CLI binary](https://github.com/github/codeql
 
 You can get the latest version, or a specific version of each one.
 
+This is in active development as of July 2022.
+
 ## Motivation
 
 Finding and installing [CodeQL](https://codeql.github.com/) and getting it working with [VSCode](https://code.visualstudio.com/) can sometimes be a little laborious and error prone. This project automates the process of finding the right installer for each part you need.
@@ -135,21 +137,29 @@ Having problems using or installing? Check these steps. If all else fails, raise
 3. Read `grab-codeql --help` to understand the available flags
 4. Review the "Getting started" section to see typical usage
 
-## Build dependencies
+## Building
+
+You can use `make` to build both the wheel and the release binary for your platform.
+
+### Wheel
 
 * Python 3.8+
 * Pip and PyPi
 * Python dependencies via PyPi (see `requirements.txt` and `dev-requirements.txt`)
+* GNU Make (or run commands manually)
 
-OR, to build a binary:
+Run `make build` to build just the wheel.
+
+### binary
 
 * `nuitka` python module from PyPi, and dependencies (`orderedset zstandard` from PyPi)
 * Cython Python 3.8+
 * Pip and PyPi
+* GNU Make (or run commands manually)
 * Python dependencies via PyPi (see `requirements.txt` and `dev-requirements.txt`)
 * a supported compiler for your platform
 
-Build the release binary with `make bin`.
+Run `make bin` to build the release binary for the platform you are on.
 
 ## Development dependencies
 
@@ -161,7 +171,11 @@ See [CONTRIBUTING](CONTRIBUTING.md)
 
 ## License
 
-See [LICENSE](LICENSE)
+This project is licensed under the terms of the MIT open source license. Please refer to [LICENSE](LICENSE) for the full terms.
+
+## Maintainers
+
+See [CODEOWNERS](CODEOWNERS)
 
 ## Acknowledgments and notes
 
