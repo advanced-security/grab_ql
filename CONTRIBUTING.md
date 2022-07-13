@@ -1,8 +1,12 @@
 # Contributing
 
+## Security
+
+For security issues, see [SECURITY](SECURITY.md).
+
 ## Bugs and issues
 
-Please raise bugs and suggestions in the Issues on the GitHub-hosted repository.
+Please raise non-security bugs and suggestions in the Issues on the GitHub-hosted repository.
 
 ## Developing
 
@@ -24,6 +28,4 @@ Your changes must be acceptable under the [LICENSE](LICENSE.md) of the project.
 
 ## Code of conduct
 
-Please be respectful, mindful of others and inclusive in your wording.
-
-Follow the [GitHub Community Forum Code of Conduct](https://docs.github.com/en/site-policy/github-terms/github-community-forum-code-of-conduct).
+Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
