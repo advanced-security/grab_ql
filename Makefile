@@ -1,8 +1,7 @@
-all: build bin
-.PHONY: build lint install clean bin
+all: lint build bin
+.PHONY: wheel lint install clean bin
 
 build:
-	make lint
 	python3 -m pip -q install build
 	python3 -m build
 
