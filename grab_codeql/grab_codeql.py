@@ -61,6 +61,8 @@ INTEL_MACHINE_STRINGS = {"i386", "i486", "i586", "i686", "amd64", "x86_64"}
 CODEQL_BINARIES_REPO = "codeql-cli-binaries"
 CODEQL_LIBRARIES_REPO = "codeql"
 CODEQL_OWNER = "github"
+VSCODE_REPO = "vscode"
+VSCODE_OWNER = "microsoft"
 GITHUB_API_BASE = "https://api.github.com/"
 GITHUB_REPOS_PATH = "repos"
 GITHUB_JSON_ACCEPT_STRING = "application/vnd.github.v3+json"
@@ -185,7 +187,7 @@ class GitHubApi():
     def tags(self,
              _tags=[],
              force: bool = False) -> Optional[List[Dict[str, Any]]]:
-        """Get tag metadata for CLI repo."""
+        """Get tag metadata for repo."""
         if len(_tags) == 0 or force:
             _tags = self.query("tags")
             if _tags is None:
@@ -194,7 +196,7 @@ class GitHubApi():
         return _tags
 
     def tag_names(self) -> List[str]:
-        """Get tag names for CLI repo."""
+        """Get tag names for repo."""
         tags = self.tags()
         if tags is not None:
             try:
@@ -206,7 +208,7 @@ class GitHubApi():
     def releases(self,
                  _releases=[],
                  force: bool = False) -> Optional[List[Dict]]:
-        """Get full release metadata for CLI repo releases."""
+        """Get full release metadata for repo releases."""
         if len(_releases) == 0 or force:
             _releases = self.query("releases")
             if _releases is None:
@@ -214,21 +216,32 @@ class GitHubApi():
                 return None
         return _releases
 
+    def release_names(self) -> List[str]:
+        """Get release names for repo."""
+        releases = self.releases()
+        if releases is not None:
+            try:
+                return [release["tag_name"] for release in releases if "tag_name" in release]
+            except TypeError:
+                return []
+        return []
+
     def release(self, tag: str) -> Optional[Dict[str, Any]]:
         """Get release metadata by tag."""
         if tag is None:
             return self.latest()
 
         # check if the tag asked for is available
-        if tag not in self.tag_names():
+        if tag not in self.release_names():
             LOG.error("Tag %s not in available list", tag)
+            LOG.debug("Available names: %s", self.release_names())
             return None
         # grab release metadata for the tag
         try:
             releases = self.releases()
             if releases:
                 return next(
-                    (item for item in releases if item["tag_name"] == tag))
+                    (name for name in self.release_names() if name == tag))
             else:
                 return None
         except StopIteration:
@@ -243,6 +256,7 @@ class GitHubApi():
         # check if the tag asked for is available
         if tag not in self.tag_names():
             LOG.error("Tag %s not in available list", tag)
+            LOG.debug("Available names: %s", self.tag_names())
             return None
         # grab tag metadata for the tag
         try:
@@ -585,6 +599,9 @@ def query_cli(
         download_path: Optional[str] = None
 ) -> Tuple[Optional[str], Optional[str]]:
     """Query the CLI releases and get one if required."""
+    if no_cli:
+        return (None, None)
+
     get_cli = GitHubApi(CODEQL_OWNER,
                         CODEQL_BINARIES_REPO,
                         session,
@@ -597,11 +614,8 @@ def query_cli(
 
     cli_tag = None
 
-    if no_cli:
-        return (None, None)
-
     if bits == BITS_32:
-        LOG.error("🔥 No CodeQL releases are available for 32 bit")
+        LOG.error("🚫 No CodeQL releases are available for 32 bit")
         return (None, None)
 
     item = get_cli.release(tag)
@@ -625,7 +639,7 @@ def query_cli(
     if platform_os == MACOS_OS and machine == MACHINE_ARM:
         if semantic_lt(cli_tag, CODEQL_BINARY_SUPPORTS_M1_VERSION):
             LOG.error(
-                "🔥 This version of the CLI binary does not support the M-series chip. Please choose a newer version."
+                "🚫 This version of the CLI binary does not support the M-series chip. Please choose a newer version."
             )
             return (None, None)
 
@@ -664,13 +678,13 @@ def query_lib(
         download_path: Optional[str] = None
 ) -> Tuple[Optional[str], Optional[str]]:
     """Query the CodeQL library tags and get one if required."""
+    if no_lib:
+        return (None, None)
+
     get_libs = GitHubApi(CODEQL_OWNER, CODEQL_LIBRARIES_REPO, session, token)
 
     if list_tags:
         print(f"CodeQL library tags: {get_libs.tag_names()}")
-        return (None, None)
-
-    if no_lib:
         return (None, None)
 
     if cli_tag is not None or lib_tag is not None:
@@ -722,7 +736,8 @@ def query_vscode(vscode_version: Optional[str],
                  no_vscode: bool = False,
                  dry_run: bool = False,
                  download_path: Optional[str] = None,
-                 list_tags: bool = False) -> Optional[str]:
+                 list_tags: bool = False,
+                 token: str = None) -> Optional[str]:
     """Discover available versions of VSCode and get selected version or 'latest'.
 
         Based on https://code.visualstudio.com/Download and
@@ -772,31 +787,43 @@ def query_vscode(vscode_version: Optional[str],
     if no_vscode:
         return None
 
+    get_vscode_version = GitHubApi(VSCODE_OWNER, VSCODE_REPO, session, token)
+
     if list_tags:
-        print(
-            "Please visit https://code.visualstudio.com/updates/ for release versions of VSCode."
-        )
+        releases = get_vscode_version.release_names()
+        if releases is not None:
+            print(f"VSCode release versions: {releases}")
+        else:
+            LOG.error("No VSCode releases found")
         return None
 
     # TODO: allow getting all o/s, bits, machines
     if platform_os == ALL_OS:
-        LOG.error("Please select a specific OS to retrieve VSCode,"
+        LOG.error("🚫 Please select a specific OS to retrieve VSCode,"
                   "this downloader will not get all versions (yet)")
         return None
 
     if platform_os in (WINDOWS_OS, LINUX_OS) and bits == ALL_BITS:
-        LOG.error("Please select a specific bit width to retrieve VSCode,"
+        LOG.error("🚫 Please select a specific bit width to retrieve VSCode,"
                   "this downloader will not get all types (yet)")
         return None
 
     if machine == ALL_MACHINES:
         LOG.error(
-            "Please select a specific machine architecture to retrieve VSCode,"
+            "🚫 Please select a specific machine architecture to retrieve VSCode,"
             "this downloader will not get all types (yet)")
         return None
 
     vscode_version = VSCODE_LATEST if vscode_version is None else vscode_version
     track = VSCODE_STABLE
+
+    # check that the version provided is a real version, using the GitHub API against the VSCode repo
+    if vscode_version != VSCODE_LATEST:
+        item = get_vscode_version.release(vscode_version)
+
+        if item is None:
+            LOG.error("Error getting version: %s", vscode_version)
+            return None
 
     # handle the os
     vscode_os: str = VSCODE_OS_MAPPING.get(platform_os, "unknown")
@@ -804,7 +831,7 @@ def query_vscode(vscode_version: Optional[str],
         if bits == BITS_32 and machine == MACHINE_ARM:
             # TODO: was this ever not true?
             LOG.error(
-                "VSCode is not available for this OS on 32 bit ARM, sorry.")
+                "🚫 VSCode is not available for this OS on 32 bit ARM, sorry.")
             return None
     # TODO: it isn't now, but was it ever?
     # if vscode_os == VSCODE_LINUX:
@@ -819,23 +846,30 @@ def query_vscode(vscode_version: Optional[str],
     brew_ok: bool = False
 
     if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_DISTRO_BREW:
-        # call out to `brew install --cask visual-studio-code`
-        brew_binary = "/opt/homebrew/bin/brew"
-        ret = subprocess.run(  # nosec
-            [brew_binary, *brew_fetch_args], capture_output=True)
-        if ret.returncode != 0:
-            brew_binary = os.path.join(os.environ.get("HOME", "/"),
-                                       "Applications/homebrew/bin/brew")
+        if vscode_version == VSCODE_LATEST:
+            # call out to `brew install --cask visual-studio-code`
+            brew_binary = "/opt/homebrew/bin/brew"
             ret = subprocess.run(  # nosec
                 [brew_binary, *brew_fetch_args], capture_output=True)
             if ret.returncode != 0:
-                pass
+                brew_binary = os.path.join(os.environ.get("HOME", "/"),
+                                        "Applications/homebrew/bin/brew")
+                ret = subprocess.run(  # nosec
+                    [brew_binary, *brew_fetch_args], capture_output=True)
+                if ret.returncode != 0:
+                    pass
+                else:
+                    brew_ok = True
             else:
                 brew_ok = True
         else:
-            brew_ok = True
+            LOG.info("ℹ️ Can only get 'latest' with HomeBrew. Falling back to zip download.")
 
     if vscode_os == VSCODE_LINUX and linux_installer == VSCODE_DISTRO_BREW:
+        if vscode_version != VSCODE_LATEST:
+            LOG.error("🚫 Can only get 'latest' with HomeBrew. Please select a different packager to get a specific version.")
+            return None
+
         # call out to `brew install --cask visual-studio-code`
         brew_binary = os.path.join(os.environ.get("HOME", "/"),
                                    "./linuxbrew/bin/brew")
@@ -855,6 +889,7 @@ def query_vscode(vscode_version: Optional[str],
 
     if brew_binary is not None:
         brew_cache_args = ["--cache", VSCODE_HOMEBREW_PACKAGE_NAME]
+        brew_file: str = None
 
         ret = subprocess.run(  # nosec
             [
@@ -866,10 +901,10 @@ def query_vscode(vscode_version: Optional[str],
         else:
             cached_path = ret.stdout.decode('utf-8').strip()
             LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-            brew_binary = shutil.copy2(
+            brew_file = shutil.copy2(
                 cached_path,
                 download_path if download_path is not None else os.getcwd())
-            LOG.info("VSCode Homebrew installer at %s", brew_binary)
+            LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
             brew_ok = True
 
         if not brew_ok:
@@ -877,7 +912,7 @@ def query_vscode(vscode_version: Optional[str],
             linux_installer = None
             macos_installer = None
         else:
-            return str(brew_binary)
+            return brew_file
 
     platform_parts: List[str] = []
     platform_parts.append(vscode_os)
@@ -932,7 +967,7 @@ def query_vscode(vscode_version: Optional[str],
                           download_path=download_path)
     if isinstance(filename, str):
         return filename
-    LOG.error("Failed to download for %s/%s/%sbit", platform_os, machine, bits)
+    LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine, bits)
     return None
 
 
@@ -997,7 +1032,7 @@ def query_vscode_extension(
     if isinstance(filename, str):
         return filename
 
-    LOG.error("Failed to get VSCode extension.")
+    LOG.error("🔥 Failed to get VSCode extension.")
     return None
 
 
@@ -1026,7 +1061,7 @@ def run(args: Namespace) -> None:
                                   download_path=args.download_path)
 
     if not args.list_tags and not args.no_cli and cli_tag is None:
-        LOG.error("Failed to get/query CLI releases. "
+        LOG.error("🔥 Failed to get/query CLI releases. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql-cli-binaries/releases"
                   " or report the error in an issue.")
@@ -1048,7 +1083,7 @@ def run(args: Namespace) -> None:
                                   download_path=args.download_path)
 
     if not args.list_tags and not args.no_lib and lib_tag is None:
-        LOG.error("Failed to get/query CodeQL library. "
+        LOG.error("🔥 Failed to get/query CodeQL library. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql/"
                   " or report the error in an issue.")
@@ -1068,10 +1103,11 @@ def run(args: Namespace) -> None:
         no_vscode=args.no_vscode,
         dry_run=args.dry_run,
         download_path=args.download_path,
-        list_tags=args.list_tags)
+        list_tags=args.list_tags,
+        token=token)
 
     if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
-        LOG.error("VSCode download failed. "
+        LOG.error("🔥 VSCode download failed. "
                   "Please check the arguments you passed in, "
                   "try https://code.visualstudio.com/Download"
                   " or report the error in an issue.")
@@ -1089,7 +1125,7 @@ def run(args: Namespace) -> None:
 
     if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None:
         LOG.error(
-            "VSCode extension download failed. "
+            "🔥 VSCode extension download failed. "
             "Please check the arguments you passed in, "
             "try https://marketplace.visualstudio.com/items?itemName=GitHub.vscode-codeql"
             " or report the error in an issue.")

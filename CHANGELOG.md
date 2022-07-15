@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.0.3b0 - unreleased
+
+### Changed
+
+* VSCode download: now lists tags and checks release is available with GitHub API
+* VSCode download: only allows HomeBrew when version is 'latest'; on MacOS falls back to zip download
+
 ## 0.0.2 - 2022-07-13
 
 ### Changed
