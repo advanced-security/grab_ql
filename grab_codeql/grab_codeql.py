@@ -221,7 +221,11 @@ class GitHubApi():
         releases = self.releases()
         if releases is not None:
             try:
-                return [release["tag_name"] for release in releases if "tag_name" in release]
+                return [
+                    release["tag_name"]
+                    for release in releases
+                    if "tag_name" in release
+                ]
             except TypeError:
                 return []
         return []
@@ -241,7 +245,7 @@ class GitHubApi():
             releases = self.releases()
             if releases:
                 return next(
-                    (name for name in self.release_names() if name == tag))
+                    (item for item in releases if item.get("tag_name") == tag))
             else:
                 return None
         except StopIteration:
@@ -853,9 +857,10 @@ def query_vscode(vscode_version: Optional[str],
                 [brew_binary, *brew_fetch_args], capture_output=True)
             if ret.returncode != 0:
                 brew_binary = os.path.join(os.environ.get("HOME", "/"),
-                                        "Applications/homebrew/bin/brew")
+                                           "Applications/homebrew/bin/brew")
                 ret = subprocess.run(  # nosec
-                    [brew_binary, *brew_fetch_args], capture_output=True)
+                    [brew_binary, *brew_fetch_args],
+                    capture_output=True)
                 if ret.returncode != 0:
                     pass
                 else:
@@ -863,11 +868,15 @@ def query_vscode(vscode_version: Optional[str],
             else:
                 brew_ok = True
         else:
-            LOG.info("ℹ️ Can only get 'latest' with HomeBrew. Falling back to zip download.")
+            LOG.info(
+                "ℹ️ Can only get 'latest' with HomeBrew. Falling back to zip download."
+            )
 
     if vscode_os == VSCODE_LINUX and linux_installer == VSCODE_DISTRO_BREW:
         if vscode_version != VSCODE_LATEST:
-            LOG.error("🚫 Can only get 'latest' with HomeBrew. Please select a different packager to get a specific version.")
+            LOG.error(
+                "🚫 Can only get 'latest' with HomeBrew. Please select a different packager to get a specific version."
+            )
             return None
 
         # call out to `brew install --cask visual-studio-code`
@@ -889,7 +898,7 @@ def query_vscode(vscode_version: Optional[str],
 
     if brew_binary is not None:
         brew_cache_args = ["--cache", VSCODE_HOMEBREW_PACKAGE_NAME]
-        brew_file: str = None
+        brew_file: Optional[str] = None
 
         ret = subprocess.run(  # nosec
             [
@@ -967,7 +976,8 @@ def query_vscode(vscode_version: Optional[str],
                           download_path=download_path)
     if isinstance(filename, str):
         return filename
-    LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine, bits)
+    LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine,
+              bits)
     return None
 
 
