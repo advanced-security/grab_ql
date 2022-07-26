@@ -82,6 +82,8 @@ HTTP_HEADER_CONTENT_TYPE = "Content-Type"
 HTTP_HEADER_ACCEPT = "Accept"
 HTTP_HEADER_ACCEPT_ENCODING = "Accept-Encoding"
 HTTP_HEADER_AUTHORIZATION = "Authorization"
+HTTP_APPLICATION_JSON = "application/json"
+HTTP_ACCEPT_ENCODING_GZIP = "gzip"
 
 VSCODE_LATEST = "latest"
 VSCODE_WINDOWS = "win32"
@@ -126,6 +128,10 @@ MARKETPLACE_FILTERTYPE_TARGET = 8
 MARKETPLACE_ASSETTYPE_VSIX = "Microsoft.VisualStudio.Services.VSIXPackage"
 MARKETPLACE_VSCODE_TARGET = "Microsoft.VisualStudio.Code"
 MARKETPLACE_CODEQL_FQNAME = "GitHub.vscode-codeql"
+MARKETPLACE_API_BASE = "https://marketplace.visualstudio.com/_apis"
+MARKETPLACE_API_EXTENSION_ENDPOINT = "/public/gallery/extensionquery"
+MARKETPLACE_API_VERSION = "api-version=3.0-preview.1"
+MARKETPLACE_HTTP_ACCEPT = f"application/json; {MARKETPLACE_API_VERSION}"
 
 
 def platform_machine_to_vendor(machine: str) -> str:
@@ -296,11 +302,14 @@ class MarketPlaceApi():
                  dry_run: bool = False,
                  download_path: Optional[str] = None) -> None:
         """Init API."""
-        self._uri = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=3.0-preview.1"
+        self._uri = urljoin(
+            MARKETPLACE_API_BASE,
+            f"{quote_plus(MARKETPLACE_API_EXTENSION_ENDPOINT)}?{quote_plus(MARKETPLACE_API_VERSION)}"
+        )
         self._headers = CaseInsensitiveDict({
-            HTTP_HEADER_CONTENT_TYPE: "application/json",
-            HTTP_HEADER_ACCEPT: "application/json; api-version=3.0-preview.1",
-            HTTP_HEADER_ACCEPT_ENCODING: "gzip"
+            HTTP_HEADER_CONTENT_TYPE: HTTP_APPLICATION_JSON,
+            HTTP_HEADER_ACCEPT: MARKETPLACE_HTTP_ACCEPT,
+            HTTP_HEADER_ACCEPT_ENCODING: HTTP_ACCEPT_ENCODING_GZIP
         })
         self._session = session
         self.dry_run = dry_run
@@ -781,7 +790,6 @@ def query_vscode(vscode_version: Optional[str],
     Linux 64 bit ARM rpm	https://update.code.visualstudio.com/{version}/linux-rpm-arm64/stable
     """
 
-    # TODO: work out how to list VSCode versions
     # TODO: allow choosing stable/insiders
     # TODO: allow choosing archive/deb/rpm/snap on Linux - autodetect if os is Linux, or override
     # TODO: allow choosing system/user/zip on Windows - default to 'user'
