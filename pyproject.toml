@@ -51,5 +51,6 @@ dev-dependencies = [
     "nuitka==0.9",
     "orderedset==2.0.3",
     "zstandard==0.18.0",
+    "pytest==7.1.2",
 ]
 repository = "https://github.com/advanced-security/grab_ql"

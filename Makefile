@@ -1,5 +1,5 @@
-all: lint build bin
-.PHONY: wheel lint install clean bin
+all: lint test build bin
+.PHONY: wheel lint install clean bin test
 
 build:
 	python3 -m pip -q install build
@@ -17,6 +17,9 @@ lint:
 	python3 -m mypy .
 	python3 -m pydocstyle .
 	-python3 -m vulture .
+
+test:
+	python3 -mpytest test
 
 bin:
 	@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."

@@ -11,3 +11,4 @@ dist/
 *.onefile-build/
 *.bin
 .DS_Store
+.pytest_cache/
