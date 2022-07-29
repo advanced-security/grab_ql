@@ -669,7 +669,7 @@ def query_cli(
                                              session,
                                              dryrun=dry_run,
                                              download_path=download_path)
-            if cli_filename is None:
+            if not dry_run and cli_filename is None:
                 LOG.error("Failed to get release asset")
                 return (None, None)
     else:
@@ -729,7 +729,7 @@ def query_lib(
                               file_download=True,
                               dry_run=dry_run,
                               download_path=download_path)
-        if filename is None or not isinstance(filename, str):
+        if not dry_run and filename is None or not isinstance(filename, str):
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
             return (None, None)
 
@@ -1022,10 +1022,10 @@ def query_vscode_extension(
         dry_run: bool = False,
         no_vscode_extension: bool = False,
         list_tags: bool = False,
-        download_path: Optional[str] = None) -> Optional[str]:
+        download_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """Query and/or get the VSCode QL extension."""
     if no_vscode_extension:
-        return None
+        return (None, None)
 
     marketplace = MarketPlaceApi(session=session,
                                  dry_run=dry_run,
@@ -1035,23 +1035,26 @@ def query_vscode_extension(
         print(
             f"VSCode extension versions: {marketplace.versions(MARKETPLACE_CODEQL_FQNAME)}"
         )
-        return None
+        return (None, None)
 
     # find "latest"
     if vscode_extension_version is None:
         vscode_extension = marketplace.latest(MARKETPLACE_CODEQL_FQNAME)
         LOG.debug(vscode_extension)
         if vscode_extension is None:
-            return None
+            return (None, None)
         vscode_extension_version = vscode_extension["version"]
 
     filename = marketplace.get(MARKETPLACE_CODEQL_FQNAME,
                                vscode_extension_version)
     if isinstance(filename, str):
-        return filename
+        return (vscode_extension_version, filename)
+
+    if dry_run:
+        return (vscode_extension_version, None)
 
     LOG.error("🔥 Failed to get VSCode extension.")
-    return None
+    return (None, None)
 
 
 def run(args: Namespace) -> None:
@@ -1133,7 +1136,7 @@ def run(args: Namespace) -> None:
     if vscode_file is not None:
         LOG.debug("Downloaded VSCode to %s", vscode_file)
 
-    vscode_ext_file: Optional[str] = query_vscode_extension(
+    vscode_ext_ver, vscode_ext_file = query_vscode_extension(
         args.vscode_ext_ver,
         session,
         no_vscode_extension=args.no_vscode_ext,
