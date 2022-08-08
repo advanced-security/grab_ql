@@ -178,12 +178,22 @@ class GitHubApi():
 
         # if not token is set, see if we are auth'd with the GitHub CLI and extract token
         if token is None:
-            res = subprocess.run(["gh", "auth", "status", "--hostname", GITHUB_DOMAIN, "--show-token"], capture_output=True, text=True)
+            res = subprocess.run(  # nosec
+                [
+                    "gh",  # nosec
+                    "auth",
+                    "status",
+                    "--hostname",
+                    GITHUB_DOMAIN,
+                    "--show-token"
+                ],
+                capture_output=True,
+                text=True)
             if res.returncode == 0:
                 # find token between ' Token : ' and the next '\n' character
                 pos = res.stderr.find(' Token: ')
                 if pos != -1:
-                    token = res.stderr[pos+8:]
+                    token = res.stderr[pos + 8:]
                     end = token.find('\n')
                     token = token[:end].strip()
 
@@ -742,6 +752,9 @@ def query_lib(
                               file_download=True,
                               dry_run=dry_run,
                               download_path=download_path)
+        if filename is not None and not isinstance(filename, str):
+            LOG.error("Malformed filename: %s", filename)
+            return (None, None)
         if not dry_run and not isinstance(filename, str):
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
             return (None, None)
@@ -1034,7 +1047,8 @@ def query_vscode_extension(
         dry_run: bool = False,
         no_vscode_extension: bool = False,
         list_tags: bool = False,
-        download_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+        download_path: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
     """Query and/or get the VSCode QL extension."""
     if no_vscode_extension:
         return (None, None)
@@ -1168,7 +1182,8 @@ def run(args: Namespace) -> bool:
         return False
 
     if vscode_ext_file is not None:
-        LOG.debug("Downloaded VSCode CodeQL extension %s to %s", vscode_ext_ver, vscode_ext_file)
+        LOG.debug("Downloaded VSCode CodeQL extension %s to %s", vscode_ext_ver,
+                  vscode_ext_file)
 
     if args.install:
         LOG.debug("Installing downloaded packages")

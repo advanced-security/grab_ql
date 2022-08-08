@@ -1,5 +1,3 @@
-import pytest
-
 from grab_codeql.grab_codeql import main
 
 

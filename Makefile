@@ -12,7 +12,7 @@ lint:
 	python3 -m pip install -q -r dev-requirements.txt
 	python3 -m yapf --in-place --style=google --recursive .
 	python3 -m isort .
-	python3 -m flake8 --max-line-length 120 --ignore=E251,W503,W504 .
+	python3 -m flake8 --max-line-length 120 --ignore=E251,W503,W504,E126 .
 	python3 -m bandit --configfile bandit.yaml --recursive --quiet .
 	python3 -m mypy .
 	python3 -m pydocstyle .

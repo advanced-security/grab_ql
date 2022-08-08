@@ -1,7 +1,5 @@
-import pytest
-
-from grab_codeql.grab_codeql import GitHubApi, CODEQL_OWNER, CODEQL_BINARIES_REPO
-from grab_codeql.grab_codeql import main
+from grab_codeql.grab_codeql import (CODEQL_BINARIES_REPO, CODEQL_OWNER,
+                                     GitHubApi, main)
 
 
 def test_cli_ver(monkeypatch):
@@ -13,6 +11,9 @@ def test_cli_ver(monkeypatch):
     cli_tag = item.get("tag_name")
 
     # then pass that in as the version we want
-    monkeypatch.setattr("sys.argv", ["pytest", "--dry-run", "--tag", cli_tag, "--no-lib", "--no-vscode", "--no-vscode-ext"])
+    monkeypatch.setattr("sys.argv", [
+        "pytest", "--dry-run", "--tag", cli_tag, "--no-lib", "--no-vscode",
+        "--no-vscode-ext"
+    ])
 
     main()
