@@ -443,7 +443,8 @@ class MarketPlaceApi():
                               dry_run=self.dry_run,
                               download_path=self._download_path)
 
-        if isinstance(filename, str):
+        if isinstance(filename, str) or (self.dry_run and filename is True):
+            filename = filename if isinstance(filename, str) else None
             return filename
         return None
 
@@ -464,7 +465,7 @@ def choose_release_asset(assets: List[Dict[str, str]],
 
 def get_release_asset(asset: Dict,
                       session: Optional[Session] = None,
-                      dryrun: bool = False,
+                      dry_run: bool = False,
                       download_path: Optional[str] = None) -> Optional[str]:
     """Grab an asset based on the metadata."""
     try:
@@ -483,10 +484,11 @@ def get_release_asset(asset: Dict,
                           name=name,
                           size=size,
                           file_download=True,
-                          dry_run=dryrun,
+                          dry_run=dry_run,
                           download_path=download_path)
 
-    if isinstance(filename, str):
+    if isinstance(filename, str) or (dry_run and filename is True):
+        filename = filename if isinstance(filename, str) else None
         return filename
     return None
 
@@ -690,11 +692,13 @@ def query_cli(
         if asset is not None:
             cli_filename = get_release_asset(asset,
                                              session,
-                                             dryrun=dry_run,
+                                             dry_run=dry_run,
                                              download_path=download_path)
-            if not dry_run and not isinstance(cli_filename, str):
+            if not isinstance(cli_filename, str) and not dry_run:
                 LOG.error("Failed to get release asset")
                 return (None, None)
+            cli_filename = cli_filename if isinstance(cli_filename,
+                                                      str) else None
     else:
         LOG.error("Failed to locate assets")
         return (None, None)
@@ -752,13 +756,13 @@ def query_lib(
                               file_download=True,
                               dry_run=dry_run,
                               download_path=download_path)
-        if filename is not None and not isinstance(filename, str):
-            LOG.error("Malformed filename: %s", filename)
-            return (None, None)
-        if not dry_run and not isinstance(filename, str):
+        if isinstance(filename, str) or (dry_run and filename is True):
+            filename = filename if isinstance(filename, str) else None
+            return (lib_tag, filename)
+        else:
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
             return (None, None)
-        return (lib_tag, filename)
+
     return (None, None)
 
 
@@ -1007,7 +1011,8 @@ def query_vscode(vscode_version: Optional[str],
                           file_download=True,
                           dry_run=dry_run,
                           download_path=download_path)
-    if isinstance(filename, str):
+    if isinstance(filename, str) or (dry_run and filename is True):
+        filename = filename if isinstance(filename, str) else None
         return (vscode_version, filename)
     LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine,
               bits)
@@ -1073,11 +1078,9 @@ def query_vscode_extension(
 
     filename = marketplace.get(MARKETPLACE_CODEQL_FQNAME,
                                vscode_extension_version)
-    if isinstance(filename, str):
+    if isinstance(filename, str) or (dry_run and filename is True):
+        filename = filename if isinstance(filename, str) else None
         return (vscode_extension_version, filename)
-
-    if dry_run:
-        return (vscode_extension_version, None)
 
     LOG.error("🔥 Failed to get VSCode extension.")
     return (None, None)
