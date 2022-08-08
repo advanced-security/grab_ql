@@ -14,3 +14,4 @@ dist/
 .pytest_cache/
 test/__pycache__/
 __pycache__/
+.vscode/
