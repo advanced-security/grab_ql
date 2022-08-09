@@ -8,3 +8,4 @@ types-requests==2.28.0
 pydocstyle==6.1.1
 vulture==2.4
 isort==5.10.1
+pytest==7.1.2
