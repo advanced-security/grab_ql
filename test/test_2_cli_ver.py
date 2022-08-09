@@ -1,5 +1,4 @@
-from grab_codeql.grab_codeql import (CODEQL_BINARIES_REPO, CODEQL_OWNER,
-                                     GitHubApi, main)
+from grab_codeql.grab_codeql import CODEQL_BINARIES_REPO, CODEQL_OWNER, GitHubApi, main
 
 
 def test_cli_ver(monkeypatch):
