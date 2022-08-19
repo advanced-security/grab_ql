@@ -178,24 +178,28 @@ class GitHubApi():
 
         # if not token is set, see if we are auth'd with the GitHub CLI and extract token
         if token is None:
-            res = subprocess.run(  # nosec
-                [
-                    "gh",  # nosec
-                    "auth",
-                    "status",
-                    "--hostname",
-                    GITHUB_DOMAIN,
-                    "--show-token"
-                ],
-                capture_output=True,
-                text=True)
-            if res.returncode == 0:
-                # find token between ' Token : ' and the next '\n' character
-                pos = res.stderr.find(' Token: ')
-                if pos != -1:
-                    token = res.stderr[pos + 8:]
-                    end = token.find('\n')
-                    token = token[:end].strip()
+            try:
+                res = subprocess.run(  # nosec
+                    [
+                        "gh",  # nosec
+                        "auth",
+                        "status",
+                        "--hostname",
+                        GITHUB_DOMAIN,
+                        "--show-token"
+                    ],
+                    capture_output=True,
+                    text=True)
+                if res.returncode == 0:
+                    # find token between ' Token : ' and the next '\n' character
+                    pos = res.stderr.find(' Token: ')
+                    if pos != -1:
+                        token = res.stderr[pos + 8:]
+                        end = token.find('\n')
+                        token = token[:end].strip()
+                        LOG.debug("Set GitHub token using gh CLI")
+            except Exception as err:
+                LOG.debug("Failed to find or open gh: %s", err)
 
         if token is not None and len(token) > 0:
             self._headers.update(
