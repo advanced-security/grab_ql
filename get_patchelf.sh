@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if uname | grep 'Linux' 2>&1 >/dev/null ; then
-    if ! patchelf; then
+    if ! command -v patchelf; then
         echo "Installing patchelf for nuitka to work"
         if command -v brew 2>&1 >/dev/null ; then
             brew install patchelf
