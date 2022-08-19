@@ -20,7 +20,7 @@ lint:
 
 test:
 	python3 -m pip install -q -r requirements.txt
-    python3 -m pip install -q -r dev-requirements.txt
+	python3 -m pip install -q -r dev-requirements.txt
 	python3 -mpytest test
 
 bin:
