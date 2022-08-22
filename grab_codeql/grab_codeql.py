@@ -954,13 +954,10 @@ def query_vscode(vscode_version: Optional[str],
             else:
                 cached_path = ret.stdout.decode('utf-8').strip()
                 LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-                if not dry_run:
-                    brew_file = shutil.copy2(
-                        cached_path,
-                        download_path if download_path is not None else os.getcwd())
-                    LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
-                else:
-                    brew_file = cached_path
+                brew_file = shutil.copy2(
+                    cached_path,
+                    download_path if download_path is not None else os.getcwd())
+                LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
                 brew_ok = True
         else:
             brew_ok = True
