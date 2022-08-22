@@ -329,10 +329,7 @@ class MarketPlaceApi():
                  dry_run: bool = False,
                  download_path: Optional[str] = None) -> None:
         """Init API."""
-        self._uri = urljoin(
-            MARKETPLACE_API_BASE,
-            f"{quote_plus(MARKETPLACE_API_EXTENSION_ENDPOINT)}?{quote_plus(MARKETPLACE_API_VERSION)}"
-        )
+        self._uri = f"{MARKETPLACE_API_BASE}{MARKETPLACE_API_EXTENSION_ENDPOINT}?{MARKETPLACE_API_VERSION}"
         self._headers = CaseInsensitiveDict({
             HTTP_HEADER_CONTENT_TYPE: HTTP_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: MARKETPLACE_HTTP_ACCEPT,
@@ -375,7 +372,6 @@ class MarketPlaceApi():
                           method=HTTP_POST,
                           headers=self._headers,
                           data=query,
-                          dry_run=self.dry_run,
                           json_download=True,
                           json_data=query)
 
@@ -447,8 +443,7 @@ class MarketPlaceApi():
                               dry_run=self.dry_run,
                               download_path=self._download_path)
 
-        if isinstance(filename, str) or (self.dry_run and filename is True):
-            filename = filename if isinstance(filename, str) else None
+        if isinstance(filename, str):
             return filename
         return None
 
@@ -491,8 +486,7 @@ def get_release_asset(asset: Dict,
                           dry_run=dry_run,
                           download_path=download_path)
 
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
+    if isinstance(filename, str):
         return filename
     return None
 
@@ -518,8 +512,7 @@ def http_query(
         method: str = HTTP_GET,
         data: Any = None,
         json_data: Any = None,
-        download_path: Optional[str] = None
-) -> Union[bool, Dict, bytes, str, None]:
+        download_path: Optional[str] = None) -> Union[Dict, bytes, str, None]:
     """
     Download the content of a URI, with optional headers, name and size.
 
@@ -530,6 +523,7 @@ def http_query(
     headers.update(session.headers)  # type: ignore
 
     req = requests.Request(method, uri, headers=headers, json=json_data)
+    LOG.debug("Request: %s, %s, %s", req, req.headers, req.url)
     prep = req.prepare()
     response = session.send(prep, stream=file_download or dry_run)
 
@@ -542,8 +536,12 @@ def http_query(
     content_disposition = response.headers.get(HTTP_HEADER_CONTENT_DISPOSITION)
     if content_disposition is not None:
         if content_disposition.startswith("attachment; filename="):
-            name = content_disposition.split(
-                "=", maxsplit=1)[1].strip('"').strip("'").strip("`").strip()
+            try:
+                name = content_disposition.split(
+                    "=",
+                    maxsplit=1)[1].strip('"').strip("'").strip("`").strip()
+            except Exception as err:
+                LOG.error("Error reading filename out of header: %s", err)
 
     if limit is not None:
         try:
@@ -563,7 +561,7 @@ def http_query(
         if response.status_code == HTTP_FORBIDDEN and response.reason == RATE_LIMIT_MSG:
             LOG.error("✋ Rate limit hit, quitting")
             sys.exit()
-        return False
+        return None
 
     try:
         total_length = int(response.headers.get(HTTP_HEADER_CONTENT_LENGTH, 0))
@@ -582,7 +580,7 @@ def http_query(
     if dry_run:
         LOG.info("Ending download, dry-run only. Would have got %sB to %s",
                  total_length if total_length is not None else "??", name)
-        return True
+        return name
 
     try:
         if file_download:
@@ -614,7 +612,7 @@ def http_query(
                 return filename
             except KeyboardInterrupt:
                 LOG.debug("Stopping download")
-                return False
+                return None
         elif json_download:
             try:
                 return response.json()
@@ -625,7 +623,7 @@ def http_query(
             return response.content
     except Exception as err:
         LOG.error("Error downloading: %s", err)
-        return False
+        return None
 
 
 def query_cli(
@@ -760,8 +758,7 @@ def query_lib(
                               file_download=True,
                               dry_run=dry_run,
                               download_path=download_path)
-        if isinstance(filename, str) or (dry_run and filename is True):
-            filename = filename if isinstance(filename, str) else None
+        if isinstance(filename, str):
             return (lib_tag, filename)
         else:
             LOG.error("Failed to get QL library at tag: %s", lib_tag)
@@ -886,12 +883,18 @@ def query_vscode(vscode_version: Optional[str],
     brew_fetch_args = [
         "fetch", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
     ]
+
+    if dry_run:
+        brew_fetch_args = [
+            "search", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
+        ]
+
     brew_binary: Optional[str] = None
     brew_ok: bool = False
 
     if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_DISTRO_BREW:
         if vscode_version == VSCODE_LATEST:
-            # call out to `brew install --cask visual-studio-code`
+            # call out to `brew fetch --cask visual-studio-code`
             brew_binary = "/opt/homebrew/bin/brew"
             ret = subprocess.run(  # nosec
                 [brew_binary, *brew_fetch_args], capture_output=True)
@@ -919,7 +922,7 @@ def query_vscode(vscode_version: Optional[str],
             )
             return (None, None)
 
-        # call out to `brew install --cask visual-studio-code`
+        # call out to `brew fetch --cask visual-studio-code`
         brew_binary = os.path.join(os.environ.get("HOME", "/"),
                                    "./linuxbrew/bin/brew")
         ret = subprocess.run(  # nosec
@@ -940,22 +943,25 @@ def query_vscode(vscode_version: Optional[str],
         brew_cache_args = ["--cache", VSCODE_HOMEBREW_PACKAGE_NAME]
         brew_file: Optional[str] = None
 
-        ret = subprocess.run(  # nosec
-            [
-                brew_binary,
-                *brew_cache_args,
-            ], capture_output=True)
-        if ret.returncode != 0:
-            LOG.error("Failed to locate Homebrew cache")
-        else:
-            cached_path = ret.stdout.decode('utf-8').strip()
-            LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-            if not dry_run:
+        if not dry_run:
+            ret = subprocess.run(  # nosec
+                [
+                    brew_binary,
+                    *brew_cache_args,
+                ], capture_output=True)
+            if ret.returncode != 0:
+                LOG.error("Failed to locate Homebrew cache")
+            else:
+                cached_path = ret.stdout.decode('utf-8').strip()
+                LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
                 brew_file = shutil.copy2(
                     cached_path,
                     download_path if download_path is not None else os.getcwd())
                 LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
+                brew_ok = True
+        else:
             brew_ok = True
+            brew_file = "dry-run-did-not-download"
 
         if not brew_ok:
             LOG.error(VSCODE_HOMEBREW_FAILED_MSG)
@@ -1015,8 +1021,7 @@ def query_vscode(vscode_version: Optional[str],
                           file_download=True,
                           dry_run=dry_run,
                           download_path=download_path)
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
+    if isinstance(filename, str):
         return (vscode_version, filename)
     LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine,
               bits)
@@ -1077,16 +1082,16 @@ def query_vscode_extension(
         vscode_extension = marketplace.latest(MARKETPLACE_CODEQL_FQNAME)
         LOG.debug(vscode_extension)
         if vscode_extension is None:
+            LOG.error("🔥 Failed to get VSCode extension, no version info.")
             return (None, None)
         vscode_extension_version = vscode_extension["version"]
 
     filename = marketplace.get(MARKETPLACE_CODEQL_FQNAME,
                                vscode_extension_version)
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
+    if isinstance(filename, str):
         return (vscode_extension_version, filename)
 
-    LOG.error("🔥 Failed to get VSCode extension.")
+    LOG.error("🔥 Failed to get VSCode extension, download failed.")
     return (None, None)
 
 
@@ -1114,7 +1119,8 @@ def run(args: Namespace) -> bool:
                                   token=token,
                                   download_path=args.download_path)
 
-    if not args.list_tags and not args.no_cli and cli_tag is None:
+    if not args.list_tags and not args.no_cli and ((cli_tag is None) or
+                                                   (cli_file is None)):
         LOG.error("🔥 Failed to get/query CLI releases. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql-cli-binaries/releases"
@@ -1137,7 +1143,8 @@ def run(args: Namespace) -> bool:
                                   token=token,
                                   download_path=args.download_path)
 
-    if not args.list_tags and not args.no_lib and lib_tag is None:
+    if not args.list_tags and not args.no_lib and ((lib_tag is None) or
+                                                   (lib_file is None)):
         LOG.error("🔥 Failed to get/query CodeQL library. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql/"
@@ -1162,7 +1169,8 @@ def run(args: Namespace) -> bool:
         list_tags=args.list_tags,
         token=token)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
+    if not args.list_tags and not args.no_vscode and ((vscode_file is None) or
+                                                      (vscode_version is None)):
         LOG.error("🔥 VSCode download failed. "
                   "Please check the arguments you passed in, "
                   "try https://code.visualstudio.com/Download"
@@ -1180,7 +1188,8 @@ def run(args: Namespace) -> bool:
         download_path=args.download_path,
         list_tags=args.list_tags)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None:
+    if not args.list_tags and not args.no_vscode_ext and (
+        (vscode_ext_file is None) or (vscode_ext_ver is None)):
         LOG.error(
             "🔥 VSCode extension download failed. "
             "Please check the arguments you passed in, "
