@@ -28,7 +28,7 @@ bin:
 	@echo "NOTE: This will only build a binary for the platform you are using."
 	python3 -m pip -q install -r requirements.txt
 	python3 -m pip -q install -r nuitka-requirements.txt
-	./get_patchelf.sh
+	./get_nuitka_deps.sh
 	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
 
 clean:
