@@ -512,8 +512,7 @@ def http_query(
         method: str = HTTP_GET,
         data: Any = None,
         json_data: Any = None,
-        download_path: Optional[str] = None
-) -> Union[Dict, bytes, str, None]:
+        download_path: Optional[str] = None) -> Union[Dict, bytes, str, None]:
     """
     Download the content of a URI, with optional headers, name and size.
 
@@ -539,7 +538,8 @@ def http_query(
         if content_disposition.startswith("attachment; filename="):
             try:
                 name = content_disposition.split(
-                    "=", maxsplit=1)[1].strip('"').strip("'").strip("`").strip()
+                    "=",
+                    maxsplit=1)[1].strip('"').strip("'").strip("`").strip()
             except Exception as err:
                 LOG.error("Error reading filename out of header: %s", err)
 
@@ -883,12 +883,18 @@ def query_vscode(vscode_version: Optional[str],
     brew_fetch_args = [
         "fetch", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
     ]
+
+    if dry_run:
+        brew_fetch_args = [
+            "search", "--quiet", "--cask", VSCODE_HOMEBREW_PACKAGE_NAME
+        ]
+
     brew_binary: Optional[str] = None
     brew_ok: bool = False
 
     if vscode_os == VSCODE_MACOS and macos_installer == VSCODE_DISTRO_BREW:
         if vscode_version == VSCODE_LATEST:
-            # call out to `brew install --cask visual-studio-code`
+            # call out to `brew fetch --cask visual-studio-code`
             brew_binary = "/opt/homebrew/bin/brew"
             ret = subprocess.run(  # nosec
                 [brew_binary, *brew_fetch_args], capture_output=True)
@@ -916,7 +922,7 @@ def query_vscode(vscode_version: Optional[str],
             )
             return (None, None)
 
-        # call out to `brew install --cask visual-studio-code`
+        # call out to `brew fetch --cask visual-studio-code`
         brew_binary = os.path.join(os.environ.get("HOME", "/"),
                                    "./linuxbrew/bin/brew")
         ret = subprocess.run(  # nosec
@@ -937,22 +943,28 @@ def query_vscode(vscode_version: Optional[str],
         brew_cache_args = ["--cache", VSCODE_HOMEBREW_PACKAGE_NAME]
         brew_file: Optional[str] = None
 
-        ret = subprocess.run(  # nosec
-            [
-                brew_binary,
-                *brew_cache_args,
-            ], capture_output=True)
-        if ret.returncode != 0:
-            LOG.error("Failed to locate Homebrew cache")
+        if not dry_run:
+            ret = subprocess.run(  # nosec
+                [
+                    brew_binary,
+                    *brew_cache_args,
+                ], capture_output=True)
+            if ret.returncode != 0:
+                LOG.error("Failed to locate Homebrew cache")
+            else:
+                cached_path = ret.stdout.decode('utf-8').strip()
+                LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
+                if not dry_run:
+                    brew_file = shutil.copy2(
+                        cached_path,
+                        download_path if download_path is not None else os.getcwd())
+                    LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
+                else:
+                    brew_file = cached_path
+                brew_ok = True
         else:
-            cached_path = ret.stdout.decode('utf-8').strip()
-            LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
-            if not dry_run:
-                brew_file = shutil.copy2(
-                    cached_path,
-                    download_path if download_path is not None else os.getcwd())
-                LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
             brew_ok = True
+            brew_file = "dry-run-did-not-download"
 
         if not brew_ok:
             LOG.error(VSCODE_HOMEBREW_FAILED_MSG)
@@ -1110,7 +1122,8 @@ def run(args: Namespace) -> bool:
                                   token=token,
                                   download_path=args.download_path)
 
-    if not args.list_tags and not args.no_cli and cli_tag is None:
+    if not args.list_tags and not args.no_cli and ((cli_tag is None) or
+                                                   (cli_file is None)):
         LOG.error("🔥 Failed to get/query CLI releases. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql-cli-binaries/releases"
@@ -1133,7 +1146,8 @@ def run(args: Namespace) -> bool:
                                   token=token,
                                   download_path=args.download_path)
 
-    if not args.list_tags and not args.no_lib and lib_tag is None:
+    if not args.list_tags and not args.no_lib and ((lib_tag is None) or
+                                                   (lib_file is None)):
         LOG.error("🔥 Failed to get/query CodeQL library. "
                   "Please check the arguments you passed in, "
                   "try https://github.com/github/codeql/"
@@ -1158,7 +1172,8 @@ def run(args: Namespace) -> bool:
         list_tags=args.list_tags,
         token=token)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
+    if not args.list_tags and not args.no_vscode and ((vscode_file is None) or
+                                                      (vscode_version is None)):
         LOG.error("🔥 VSCode download failed. "
                   "Please check the arguments you passed in, "
                   "try https://code.visualstudio.com/Download"
@@ -1176,11 +1191,8 @@ def run(args: Namespace) -> bool:
         download_path=args.download_path,
         list_tags=args.list_tags)
 
-    if (
-        (not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None)
-        or
-        (vscode_ext_ver is None)
-       ):
+    if not args.list_tags and not args.no_vscode_ext and (
+        (vscode_ext_file is None) or (vscode_ext_ver is None)):
         LOG.error(
             "🔥 VSCode extension download failed. "
             "Please check the arguments you passed in, "
