@@ -1,11 +1,11 @@
 #!/bin/sh
 
 if uname | grep 'Linux' 2>&1 >/dev/null ; then
-    install patchelf '' '' '' '' '' '' ''
-    install libfuse2 fuse libfuse@2 '' fuse-libs fuse-libs fuse
+    _install_package patchelf '' '' '' '' '' '' ''
+    _install_package libfuse2 fuse libfuse@2 '' fuse-libs fuse-libs fuse
 fi
 
-function install() {
+_install_package() {
     package = $1
     package_brew = $2
     pacakge_nix = $3
