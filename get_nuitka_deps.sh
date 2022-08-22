@@ -1,13 +1,13 @@
 #!/bin/sh
 
 _install_package() {
-    package = $1
-    package_brew = $2
-    pacakge_nix = $3
-    package_apt = $4
-    package_yum = $5
-    package_dnf = $6
-    package_apk = $7
+    package=$1
+    package_brew=$2
+    pacakge_nix=$3
+    package_apt=$4
+    package_yum=$5
+    package_dnf=$6
+    package_apk=$7
 
     if ! command -v "${package}"; then
         echo "Installing ${package}"
