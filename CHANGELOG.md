@@ -2,8 +2,16 @@
 
 ## 0.0.4 - 2022-08-19
 
+### Added
+
+* Binary build: installs `patchelf` and `libfuse2` on Linux to allow Nuitka to work
+* Releases: scripted release with GitHub API over the GitHub CLI
+
+### Changed
+
+* VSCode: fixed download
+* GitHub CLI: allowed for it not being avaiable
 * Tests: now install the requirements beforehand, since first-time builds will fail otherwise
-* Binary build: installs `patchelf` on Linux to allow Nuitka to work
 
 ## 0.0.3 - 2022-08-08
 
