@@ -30,6 +30,7 @@ bin:
 	python3 -m pip -q install -r nuitka-requirements.txt
 	./get_nuitka_deps.sh
 	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
+	mv grab_codeql.bin grab_codeql-`python3 -c 'import toml; print(toml.load("pyproject.toml").get("project").get("version"))'`-`uname -s`-`uname -m`.bin
 
 clean:
 	-rm *.zip *.vsix grab_codeql.bin
