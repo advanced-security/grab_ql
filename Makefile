@@ -1,5 +1,5 @@
 all: lint test build bin
-.PHONY: wheel lint install clean bin test
+.PHONY: wheel lint install clean bin test release
 
 build:
 	python3 -m pip -q install build
@@ -24,13 +24,10 @@ test:
 	python3 -mpytest test
 
 bin:
-	@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."
-	@echo "NOTE: This will only build a binary for the platform you are using."
-	python3 -m pip -q install -r requirements.txt
-	python3 -m pip -q install -r nuitka-requirements.txt
-	./get_nuitka_deps.sh
-	python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
-	mv grab_codeql.bin grab_codeql-`python3 -c 'import toml; print(toml.load("pyproject.toml").get("project").get("version"))'`-`uname -s`-`uname -m`.bin
+	./build_nuitka.sh
+
+release:
+	./do_release.sh
 
 clean:
 	-rm *.zip *.vsix grab_codeql.bin
