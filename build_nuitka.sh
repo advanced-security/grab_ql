@@ -49,7 +49,22 @@ _install_package() {
     fi
 }
 
+@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."
+@echo "NOTE: This will only build a binary for the platform you are using."
+
+# Python requirements
+python3 -m pip -q install -r requirements.txt
+python3 -m pip -q install -r nuitka-requirements.txt
+
+# Linux requirements for Nuitka
 if uname | grep 'Linux' 2>&1 >/dev/null ; then
     _install_package patchelf '' '' '' '' '' '' ''
     _install_package libfuse2 fuse libfuse@2 '' fuse-libs fuse-libs fuse
 fi
+
+# Build with Nuitka
+python3 -m nuitka --standalone --onefile ./grab_codeql/grab_codeql.py
+
+# Rename binary
+GRAB_QL_VERSION=`python3 -c 'import toml; print(toml.load("pyproject.toml").get("project").get("version"))'`
+mv grab_codeql.bin grab_codeql-"${GRAB_QL_VERSION}"-`uname -s`-`uname -m`.bin
