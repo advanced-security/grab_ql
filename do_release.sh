@@ -6,4 +6,4 @@ REPO='grab_ql'
 
 echo "Doing release ${GRAB_QL_VERSION} to ${OWNER}/${REPO}"
 
-gh release create v"${GRAB_QL_VERSION}" grab_codeql-"${GRAB_QL_VERSION}"-*.bin --repo "${OWNER}/${REPO}" --generate-notes --target main --title "Release v${GRAB_QL_VERSION}"
+gh release create v"${GRAB_QL_VERSION}" grab_codeql-"${GRAB_QL_VERSION}"-*.bin dist/grab_codeql-"${GRAB_QL_VERSION}"-py3-none-any.whl --repo "${OWNER}/${REPO}" --generate-notes --target main --title "Release v${GRAB_QL_VERSION}"
