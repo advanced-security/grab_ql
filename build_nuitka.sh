@@ -49,8 +49,8 @@ _install_package() {
     fi
 }
 
-@echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."
-@echo "NOTE: This will only build a binary for the platform you are using."
+echo "NOTE: Ensure that the version of python3 is a CPython distribution to build a binary with nuitka."
+echo "NOTE: This will only build a binary for the platform you are using."
 
 # Python requirements
 python3 -m pip -q install -r requirements.txt
