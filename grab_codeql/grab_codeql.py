@@ -106,7 +106,8 @@ VSCODE_LINUX_DISTRO_REDHAT = "redhat"
 VSCODE_LINUX_DISTRO_SNAP = "snap"
 VSCODE_DISTRO_BREW = "brew"
 VSCODE_MACOS_DISTRO_ARCHIVE = "zip"
-VSCODE_DOWNLOAD_BASE = "https://update.code.visualstudio.com/"
+VSCODE_API_DOMAIN = "update.code.visualstudio.com"
+VSCODE_DOWNLOAD_BASE = f"https://{VSCODE_API_DOMAIN}/"
 VSCODE_STABLE = "stable"
 VSCODE_INSIDERS = "insiders"
 VSCODE_OS_MAPPING = {
@@ -130,8 +131,9 @@ MARKETPLACE_FILTERTYPE_TARGET = 8
 MARKETPLACE_ASSETTYPE_VSIX = "Microsoft.VisualStudio.Services.VSIXPackage"
 MARKETPLACE_VSCODE_TARGET = "Microsoft.VisualStudio.Code"
 MARKETPLACE_CODEQL_FQNAME = "GitHub.vscode-codeql"
-MARKETPLACE_API_BASE = "https://marketplace.visualstudio.com/_apis"
-MARKETPLACE_API_EXTENSION_ENDPOINT = "/public/gallery/extensionquery"
+MARKETPLACE_API_DOMAIN = "marketplace.visualstudio.com"
+MARKETPLACE_API_BASE = f"https://{MARKETPLACE_API_DOMAIN}/"
+MARKETPLACE_API_EXTENSION_ENDPOINT = "_apis/public/gallery/extensionquery"
 MARKETPLACE_API_VERSION = "api-version=3.0-preview.1"
 MARKETPLACE_HTTP_ACCEPT = f"application/json; {MARKETPLACE_API_VERSION}"
 
@@ -197,9 +199,9 @@ class GitHubApi():
                         token = res.stderr[pos + 8:]
                         end = token.find('\n')
                         token = token[:end].strip()
-                        LOG.debug("Set GitHub token using gh CLI")
+                        LOG.debug("ℹ️ Set GitHub token using gh CLI")
             except Exception as err:
-                LOG.debug("Failed to find or open gh: %s", err)
+                LOG.debug("ℹ️ Failed to find or open gh: %s", err)
 
         if token is not None and len(token) > 0:
             self._headers.update(
@@ -224,7 +226,7 @@ class GitHubApi():
         if len(_tags) == 0 or force:
             _tags = self.query("tags")
             if _tags is None:
-                LOG.error("Tags was not retrieved")
+                LOG.error("🚫 Tags was not retrieved")
                 return None
         return _tags
 
@@ -245,7 +247,7 @@ class GitHubApi():
         if len(_releases) == 0 or force:
             _releases = self.query("releases")
             if _releases is None:
-                LOG.error("Failed to list releases")
+                LOG.error("🚫 Failed to list releases")
                 return None
         return _releases
 
@@ -270,8 +272,8 @@ class GitHubApi():
 
         # check if the tag asked for is available
         if tag not in self.release_names():
-            LOG.error("Tag %s not in available list", tag)
-            LOG.debug("Available names: %s", self.release_names())
+            LOG.error("🚫 Tag %s not in available list", tag)
+            LOG.debug("ℹ️ Available names: %s", self.release_names())
             return None
         # grab release metadata for the tag
         try:
@@ -282,7 +284,7 @@ class GitHubApi():
             else:
                 return None
         except StopIteration:
-            LOG.error("No matching tag in releases")
+            LOG.error("🚫 No matching tag in releases")
             return None
 
     def tag(self, tag: str) -> Optional[Dict[str, str]]:
@@ -292,8 +294,8 @@ class GitHubApi():
 
         # check if the tag asked for is available
         if tag not in self.tag_names():
-            LOG.error("Tag %s not in available list", tag)
-            LOG.debug("Available names: %s", self.tag_names())
+            LOG.error("🚫 Tag %s not in available list", tag)
+            LOG.debug("ℹ️ Available names: %s", self.tag_names())
             return None
         # grab tag metadata for the tag
         try:
@@ -302,7 +304,7 @@ class GitHubApi():
                 return next((item for item in tags if item["name"] == tag))
             return None
         except (StopIteration, TypeError):
-            LOG.error("No matching tag")
+            LOG.error("🚫 No matching tag")
             return None
 
     def latest(self) -> Optional[Dict[str, str]]:
@@ -316,7 +318,7 @@ class GitHubApi():
                 return max(releases,
                            key=lambda item: isoparse(item["created_at"]))
             except (ValueError, KeyError) as err:
-                LOG.error("Failed to get latest item: %s", err)
+                LOG.error("🚫 Failed to get latest item: %s", err)
 
         return None
 
@@ -331,8 +333,7 @@ class MarketPlaceApi():
         """Init API."""
         self._uri = urljoin(
             MARKETPLACE_API_BASE,
-            f"{quote_plus(MARKETPLACE_API_EXTENSION_ENDPOINT)}?{quote_plus(MARKETPLACE_API_VERSION)}"
-        )
+            f"{MARKETPLACE_API_EXTENSION_ENDPOINT}?{MARKETPLACE_API_VERSION}")
         self._headers = CaseInsensitiveDict({
             HTTP_HEADER_CONTENT_TYPE: HTTP_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: MARKETPLACE_HTTP_ACCEPT,
@@ -346,7 +347,7 @@ class MarketPlaceApi():
                   name: str,
                   _memo: Dict[str, List[Dict]] = {}) -> List[Dict]:
         if name in _memo:
-            LOG.debug("Found %s in cache", name)
+            LOG.debug("ℹ️ Found %s in cache", name)
             return _memo[name]
 
         query = {
@@ -375,14 +376,13 @@ class MarketPlaceApi():
                           method=HTTP_POST,
                           headers=self._headers,
                           data=query,
-                          dry_run=self.dry_run,
                           json_download=True,
                           json_data=query)
 
         # TODO: check for and act on pagingToken
 
         if data is None or not isinstance(data, dict):
-            LOG.error("Didn't get extension version information")
+            LOG.error("🚫 Didn't get extension version information")
             return []
 
         output = []
@@ -413,10 +413,10 @@ class MarketPlaceApi():
             return max(self._versions(name),
                        key=lambda item: isoparse(item["lastUpdated"]))
         except (ValueError, KeyError) as err:
-            LOG.error("Failed to get latest item: %s", err)
+            LOG.error("🚫 Failed to get latest item: %s", err)
             return None
 
-    def get(self, name: str, version: str) -> Optional[str]:
+    def download(self, name: str, version: str) -> Optional[str]:
         """Download Vsix for given name/version."""
         if version not in self.versions(name):
             LOG.error("Version %s not found for %s", version, name)
@@ -426,7 +426,7 @@ class MarketPlaceApi():
             version_details = next((item for item in self._versions(name)
                                     if item.get("version") == version))
         except StopIteration:
-            LOG.error("Unable to retrieve item metadata for %s/v%s", name,
+            LOG.error("🚫 Unable to retrieve item metadata for %s/v%s", name,
                       version)
             return None
 
@@ -436,7 +436,7 @@ class MarketPlaceApi():
                  for item in version_details.get("files", [])
                  if item.get("assetType") == MARKETPLACE_ASSETTYPE_VSIX))
         except StopIteration:
-            LOG.error("No file available for %s/v%s", name, version)
+            LOG.error("🚫 No file available for %s/v%s", name, version)
 
         LOG.debug(file_to_get_uri)
 
@@ -447,9 +447,8 @@ class MarketPlaceApi():
                               dry_run=self.dry_run,
                               download_path=self._download_path)
 
-        if isinstance(filename, str) or (self.dry_run and filename is True):
-            filename = filename if isinstance(filename, str) else None
-            return filename
+        if filename is not None:
+            return str(filename)
         return None
 
 
@@ -463,7 +462,7 @@ def choose_release_asset(assets: List[Dict[str, str]],
     try:
         return next((asset for asset in assets if asset["name"] == name_to_get))
     except (StopIteration, KeyError) as err:
-        LOG.error("Failed to match asset to name: %s", err)
+        LOG.error("🚫 Failed to match asset to name: %s", err)
         return None
 
 
@@ -479,7 +478,7 @@ def get_release_asset(asset: Dict,
         uri = asset["browser_download_url"]
         name = asset.get("name", None)
     except KeyError as err:
-        LOG.error("Didn't find expected key in asset results: %s", err)
+        LOG.error("🚫 Didn't find expected key in asset results: %s", err)
         return None
 
     filename = http_query(uri,
@@ -491,9 +490,8 @@ def get_release_asset(asset: Dict,
                           dry_run=dry_run,
                           download_path=download_path)
 
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
-        return filename
+    if filename is not None:
+        return str(filename)
     return None
 
 
@@ -502,7 +500,7 @@ def semantic_lt(tag: str, base_tag: str) -> bool:
     try:
         return version.parse(tag) < version.parse(base_tag)
     except (ValueError, version.InvalidVersion) as err:
-        LOG.error("Malformed versions: %s vs %s: %s", tag, base_tag, err)
+        LOG.error("🚫 Malformed versions: %s vs %s: %s", tag, base_tag, err)
         return False
 
 
@@ -518,8 +516,7 @@ def http_query(
         method: str = HTTP_GET,
         data: Any = None,
         json_data: Any = None,
-        download_path: Optional[str] = None
-) -> Union[bool, Dict, bytes, str, None]:
+        download_path: Optional[str] = None) -> Union[Dict, bytes, str, None]:
     """
     Download the content of a URI, with optional headers, name and size.
 
@@ -548,41 +545,41 @@ def http_query(
     if limit is not None:
         try:
             if remaining is not None:
-                LOG.debug("%d of %d requests for this hour remaining",
+                LOG.debug("ℹ️ %d of %d requests for this hour remaining",
                           int(remaining), int(limit))
             if remaining is not None and int(remaining) < WARNING_THRESHOLD:
-                LOG.warning("Only %d requests left this hour", int(remaining))
+                LOG.warning("😱 Only %d requests left this hour", int(remaining))
         except ValueError as err:
-            LOG.debug("Strange X-Limit header: %s", err)
+            LOG.debug("ℹ️ Strange X-Limit header: %s", err)
 
     if not response.ok:
-        LOG.error("🛑 Response not OK getting download (%d): %s",
+        LOG.error("🚫 Response not OK getting download (%d): %s",
                   response.status_code, name if name is not None else prep.url)
         LOG.debug("ℹ️ URL was: %s", prep.url)
         LOG.error(response.content)
         if response.status_code == HTTP_FORBIDDEN and response.reason == RATE_LIMIT_MSG:
             LOG.error("✋ Rate limit hit, quitting")
             sys.exit()
-        return False
+        return None
 
     try:
         total_length = int(response.headers.get(HTTP_HEADER_CONTENT_LENGTH, 0))
     except (ValueError, TypeError):
-        LOG.debug("Malformed content-length header")
+        LOG.debug("ℹ️ Malformed content-length header")
         total_length = None
 
     if total_length is not None and size is not None and total_length != size:
         LOG.warning(
-            "Download size is not as expected from metadata: expected was %s vs %s",
+            "😱 Download size is not as expected from metadata: expected was %s vs %s",
             size, total_length)
 
     if size is not None:
         total_length = size
 
     if dry_run:
-        LOG.info("Ending download, dry-run only. Would have got %sB to %s",
+        LOG.info("ℹ️  Ending download, dry-run only. Would have got %sB to %s",
                  total_length if total_length is not None else "??", name)
-        return True
+        return name
 
     try:
         if file_download:
@@ -613,19 +610,19 @@ def http_query(
                 LOG.debug("Got %s", filename)
                 return filename
             except KeyboardInterrupt:
-                LOG.debug("Stopping download")
-                return False
+                LOG.debug("🛑 Stopping download")
+                return None
         elif json_download:
             try:
                 return response.json()
             except JSONDecodeError as err:
-                LOG.error("JSON error: %s", err)
+                LOG.error("🚫 JSON error: %s", err)
                 return None
         else:
             return response.content
     except Exception as err:
-        LOG.error("Error downloading: %s", err)
-        return False
+        LOG.error("🚫 Error downloading: %s", err)
+        return None
 
 
 def query_cli(
@@ -651,7 +648,7 @@ def query_cli(
                         download_path=download_path)
 
     if list_tags:
-        print(f"CodeQL CLI binary tags: {get_cli.tag_names()}")
+        print(f"✅ CodeQL CLI binary tags: {get_cli.tag_names()}")
         return (None, None)
 
     cli_tag = None
@@ -663,18 +660,18 @@ def query_cli(
     item = get_cli.release(tag)
 
     if item is None:
-        LOG.error("Error getting metadata for CLI release: %s",
+        LOG.error("🚫 Error getting metadata for CLI release: %s",
                   "latest" if tag is None else tag)
         return (None, None)
 
     cli_tag = item.get("tag_name")
 
-    LOG.info("CLI tag is %s, getting for platform %s/%s/%s", cli_tag,
-             platform_os, machine, bits)
-
     if cli_tag is None:
-        LOG.error("CLI tag is not present in CLI release metadata: %s", item)
+        LOG.error("🚫 CLI tag is not present in CLI release metadata: %s", item)
         return (None, None)
+
+    LOG.info("✅ CLI tag is %s, getting for platform %s/%s/%s", cli_tag,
+             platform_os, machine, bits)
 
     # check if we want macos, arm - if so, check release is >= CODEQL_BINARY_SUPPORTS_M1_VERSION
     # https://github.com/github/codeql-cli-binaries/blob/HEAD/CHANGELOG.md
@@ -699,12 +696,12 @@ def query_cli(
                                              dry_run=dry_run,
                                              download_path=download_path)
             if not isinstance(cli_filename, str) and not dry_run:
-                LOG.error("Failed to get release asset")
+                LOG.error("🚫 Failed to get release asset")
                 return (None, None)
             cli_filename = cli_filename if isinstance(cli_filename,
                                                       str) else None
     else:
-        LOG.error("Failed to locate assets")
+        LOG.error("🚫 Failed to locate assets")
         return (None, None)
 
     return (cli_tag, cli_filename)
@@ -728,7 +725,7 @@ def query_lib(
     get_libs = GitHubApi(CODEQL_OWNER, CODEQL_LIBRARIES_REPO, session, token)
 
     if list_tags:
-        print(f"CodeQL library tags: {get_libs.tag_names()}")
+        print(f"✅ CodeQL library tags: {get_libs.tag_names()}")
         return (None, None)
 
     if cli_tag is not None or lib_tag is not None:
@@ -739,15 +736,15 @@ def query_lib(
         if latest:
             lib_tag = f"codeql-cli/{latest.get('tag_name')}"
         else:
-            LOG.error("Could not get latest library version")
+            LOG.error("🚫 Could not get latest library version")
             return (None, None)
 
-    LOG.info("Library tag is %s", lib_tag)
+    LOG.info("✅ Library tag is %s", lib_tag)
 
     item = get_libs.tag(lib_tag)
 
     if item is None:
-        LOG.error("Error getting tag: %s", lib_tag)
+        LOG.error("🚫 Error getting tag: %s", lib_tag)
         return (None, None)
 
     LOG.debug(json.dumps(item, indent=2))
@@ -760,11 +757,10 @@ def query_lib(
                               file_download=True,
                               dry_run=dry_run,
                               download_path=download_path)
-        if isinstance(filename, str) or (dry_run and filename is True):
-            filename = filename if isinstance(filename, str) else None
-            return (lib_tag, filename)
+        if filename is not None:
+            return (lib_tag, str(filename))
         else:
-            LOG.error("Failed to get QL library at tag: %s", lib_tag)
+            LOG.error("🚫 Failed to get QL library at tag: %s", lib_tag)
             return (None, None)
 
     return (None, None)
@@ -836,9 +832,9 @@ def query_vscode(vscode_version: Optional[str],
     if list_tags:
         releases = get_vscode_version.release_names()
         if releases is not None:
-            print(f"VSCode release versions: {releases}")
+            print(f"✅ VSCode release versions: {releases}")
         else:
-            LOG.error("No VSCode releases found")
+            LOG.error("🚫 No VSCode releases found")
         return (None, None)
 
     # TODO: allow getting all o/s, bits, machines
@@ -866,8 +862,11 @@ def query_vscode(vscode_version: Optional[str],
         item = get_vscode_version.release(vscode_version)
 
         if item is None:
-            LOG.error("Error getting version: %s", vscode_version)
+            LOG.error("🚫 Error getting version: %s", vscode_version)
             return (None, None)
+
+    LOG.info("✅ VSCode version is %s, getting for platform %s/%s/%s", vscode_version,
+             platform_os, machine, bits)
 
     # handle the os
     vscode_os: str = VSCODE_OS_MAPPING.get(platform_os, "unknown")
@@ -946,15 +945,17 @@ def query_vscode(vscode_version: Optional[str],
                 *brew_cache_args,
             ], capture_output=True)
         if ret.returncode != 0:
-            LOG.error("Failed to locate Homebrew cache")
+            LOG.error("🚫 Failed to locate Homebrew cache")
         else:
             cached_path = ret.stdout.decode('utf-8').strip()
-            LOG.debug("Homebrew cached VSCode installer at %s", cached_path)
+            LOG.debug("ℹ️ Homebrew cached VSCode installer at %s", cached_path)
             if not dry_run:
                 brew_file = shutil.copy2(
                     cached_path,
                     download_path if download_path is not None else os.getcwd())
                 LOG.info("✅ VSCode Homebrew installer at %s", brew_file)
+            else:
+                brew_file = cached_path
             brew_ok = True
 
         if not brew_ok:
@@ -1008,17 +1009,19 @@ def query_vscode(vscode_version: Optional[str],
     # create the URL to download the artifact
     platform_string: str = "-".join(platform_parts)
 
-    uri: str = f"{VSCODE_DOWNLOAD_BASE}/{quote_plus(vscode_version)}/{quote_plus(platform_string)}/{quote_plus(track)}"
+    uri: str = urljoin(
+        f"{VSCODE_DOWNLOAD_BASE}",
+        f"/{quote_plus(vscode_version)}/{quote_plus(platform_string)}/{quote_plus(track)}"
+    )
 
     filename = http_query(uri,
                           session,
                           file_download=True,
                           dry_run=dry_run,
                           download_path=download_path)
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
-        return (vscode_version, filename)
-    LOG.error("🔥 Failed to download for %s/%s/%sbit", platform_os, machine,
+    if filename is not None:
+        return (vscode_version, str(filename))
+    LOG.error("🚫 Failed to download for %s/%s/%sbit", platform_os, machine,
               bits)
     return (None, None)
 
@@ -1045,7 +1048,7 @@ def resolve_platform(platform_os: str, bits: str, machine: str,
 
     resolved = (platform_norm, bits_norm, machine_norm, distro_norm)
 
-    LOG.debug("Found this platform: %s", resolved)
+    LOG.debug("ℹ️ Found this platform: %s", resolved)
 
     return resolved
 
@@ -1068,7 +1071,7 @@ def query_vscode_extension(
 
     if list_tags:
         print(
-            f"VSCode extension versions: {marketplace.versions(MARKETPLACE_CODEQL_FQNAME)}"
+            f"✅ VSCode extension versions: {marketplace.versions(MARKETPLACE_CODEQL_FQNAME)}"
         )
         return (None, None)
 
@@ -1077,16 +1080,22 @@ def query_vscode_extension(
         vscode_extension = marketplace.latest(MARKETPLACE_CODEQL_FQNAME)
         LOG.debug(vscode_extension)
         if vscode_extension is None:
+            LOG.error("🚫 Failed to get latest version info for VSCode extension.")
             return (None, None)
         vscode_extension_version = vscode_extension["version"]
+    else:
+        if vscode_extension_version not in marketplace.versions(MARKETPLACE_CODEQL_FQNAME):
+            LOG.error("🚫 Version not found for VSCode extension: %s", vscode_extension_version)
+            return (None, None)
 
-    filename = marketplace.get(MARKETPLACE_CODEQL_FQNAME,
-                               vscode_extension_version)
-    if isinstance(filename, str) or (dry_run and filename is True):
-        filename = filename if isinstance(filename, str) else None
-        return (vscode_extension_version, filename)
+    LOG.info("✅ VSCode extension version is %s, getting", vscode_extension_version)
 
-    LOG.error("🔥 Failed to get VSCode extension.")
+    filename = marketplace.download(MARKETPLACE_CODEQL_FQNAME,
+                                    vscode_extension_version)
+    if filename is not None:
+        return (vscode_extension_version, str(filename))
+
+    LOG.error("🚫 Failed to get VSCode extension.")
     return (None, None)
 
 
@@ -1121,8 +1130,8 @@ def run(args: Namespace) -> bool:
                   " or report the error in an issue.")
         return False
 
-    if cli_file is not None:
-        LOG.debug("Downloaded CLI to %s", cli_file)
+    if cli_file is not None and args.dry_run is None:
+        LOG.debug("ℹ️ Downloaded CLI to %s", cli_file)
 
     lib_tag: Optional[str]
     lib_file: Optional[str]
@@ -1144,8 +1153,8 @@ def run(args: Namespace) -> bool:
                   " or report the error in an issue.")
         return False
 
-    if lib_file is not None:
-        LOG.debug("Downloaded library to %s", lib_file)
+    if lib_file is not None and args.dry_run is None:
+        LOG.debug("ℹ️ Downloaded library to %s", lib_file)
 
     vscode_version, vscode_file = query_vscode(
         args.vscode_ver,
@@ -1162,15 +1171,15 @@ def run(args: Namespace) -> bool:
         list_tags=args.list_tags,
         token=token)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode and vscode_file is None:
+    if not args.list_tags and not args.no_vscode and vscode_file is None:
         LOG.error("🔥 VSCode download failed. "
                   "Please check the arguments you passed in, "
                   "try https://code.visualstudio.com/Download"
                   " or report the error in an issue.")
         return False
 
-    if vscode_file is not None:
-        LOG.debug("Downloaded VSCode %s to %s", vscode_version, vscode_file)
+    if vscode_file is not None and args.dry_run is None:
+        LOG.debug("ℹ️ Downloaded VSCode %s to %s", vscode_version, vscode_file)
 
     vscode_ext_ver, vscode_ext_file = query_vscode_extension(
         args.vscode_ext_ver,
@@ -1180,7 +1189,7 @@ def run(args: Namespace) -> bool:
         download_path=args.download_path,
         list_tags=args.list_tags)
 
-    if not args.list_tags and not args.dry_run and not args.no_vscode_ext and vscode_ext_file is None:
+    if not args.list_tags and not args.no_vscode_ext and vscode_ext_file is None:
         LOG.error(
             "🔥 VSCode extension download failed. "
             "Please check the arguments you passed in, "
@@ -1188,14 +1197,14 @@ def run(args: Namespace) -> bool:
             " or report the error in an issue.")
         return False
 
-    if vscode_ext_file is not None:
-        LOG.debug("Downloaded VSCode CodeQL extension %s to %s", vscode_ext_ver,
-                  vscode_ext_file)
+    if vscode_ext_file is not None and args.dry_run is None:
+        LOG.debug("ℹ️ Downloaded VSCode CodeQL extension %s to %s",
+                  vscode_ext_ver, vscode_ext_file)
 
     if args.install:
-        LOG.debug("Installing downloaded packages")
+        LOG.debug("ℹ️ Installing downloaded packages")
         raise NotImplementedError(
-            "Installing is not yet implemented, please install the downloaded files manually"
+            "🛑 Installing is not yet implemented, please install the downloaded files manually"
         )
 
     return True
