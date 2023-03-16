@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.0.5-b1 - unreleased
+
+### Added
+
+* Bundles: added getting bundles by tag (not by version, that will come later)
+
 ## 0.0.4 - 2022-08-19
 
 ### Added

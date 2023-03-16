@@ -469,7 +469,7 @@ def choose_release_asset(assets: List[Dict[str, str]],
 
 
 def choose_bundle_asset(assets: List[Dict[str, str]],
-                         platform_os: str = None) -> Optional[Dict[str, str]]:
+                        platform_os: str = None) -> Optional[Dict[str, str]]:
     """Pick asset from list by selected platform."""
     name_to_get = (
         'codeql-bundle' +
@@ -1118,6 +1118,7 @@ def query_vscode_extension(
     LOG.error("🚫 Failed to get VSCode extension.")
     return (None, None)
 
+
 def query_bundle(
         tag: str,
         session: Session,
@@ -1136,11 +1137,11 @@ def query_bundle(
         return (None, None)
 
     get_bundle = GitHubApi(CODEQL_OWNER,
-                        CODEQL_BUNDLES_REPO,
-                        session,
-                        token,
-                        download_path=download_path)
-    
+                           CODEQL_BUNDLES_REPO,
+                           session,
+                           token,
+                           download_path=download_path)
+
     # TODO: resolve to a named version, not a date stamp
     # Do this by grabbing metadata for each release, finding the `cli-version-2.12.4.txt` file, and parsing the version of the filename
     if list_tags:
@@ -1176,7 +1177,8 @@ def query_bundle(
     bundle_tag = item.get("tag_name")
 
     if bundle_tag is None:
-        LOG.error("🚫 Bundle tag is not present in bundle release metadata: %s", item)
+        LOG.error("🚫 Bundle tag is not present in bundle release metadata: %s",
+                  item)
         return (None, None)
 
     LOG.info("✅ Bundle tag is %s, getting for platform %s/%s/%s", bundle_tag,
@@ -1201,14 +1203,14 @@ def query_bundle(
                              str]] = choose_bundle_asset(assets, platform_os)
         if asset is not None:
             bundle_filename = get_release_asset(asset,
-                                             session,
-                                             dry_run=dry_run,
-                                             download_path=download_path)
+                                                session,
+                                                dry_run=dry_run,
+                                                download_path=download_path)
             if not isinstance(bundle_filename, str) and not dry_run:
                 LOG.error("🚫 Failed to get release asset")
                 return (None, None)
-            bundle_filename = bundle_filename if isinstance(bundle_filename,
-                                                      str) else None
+            bundle_filename = bundle_filename if isinstance(
+                bundle_filename, str) else None
         else:
             LOG.error("🚫 Failed to choose asset")
             return (None, None)
@@ -1280,16 +1282,16 @@ def run(args: Namespace) -> bool:
     bundle_file: Optional[str]
 
     bundle_tag, bundle_file = query_bundle(args.bundle_tag,
-                                  session,
-                                  platform_os,
-                                  bits,
-                                  machine,
-                                  cli_tag=cli_tag,
-                                  list_tags=args.list_tags,
-                                  no_bundle=args.no_bundle,
-                                  dry_run=args.dry_run,
-                                  token=token,
-                                  download_path=args.download_path)
+                                           session,
+                                           platform_os,
+                                           bits,
+                                           machine,
+                                           cli_tag=cli_tag,
+                                           list_tags=args.list_tags,
+                                           no_bundle=args.no_bundle,
+                                           dry_run=args.dry_run,
+                                           token=token,
+                                           download_path=args.download_path)
 
     if not args.list_tags and not args.no_cli and cli_tag is None:
         LOG.error("🔥 Failed to get/query CLI releases. "
@@ -1382,8 +1384,8 @@ def add_arguments(parser: ArgumentParser) -> None:
         "-bt",
         "--bundle-tag",
         required=False,
-        help=
-        "Which tag of the CodeQL bundle to retrieve (if absent, uses --tag)")
+        help="Which tag of the CodeQL bundle to retrieve (if absent, uses --tag)"
+    )
     parser.add_argument(
         "-v",
         "--vscode-ver",
