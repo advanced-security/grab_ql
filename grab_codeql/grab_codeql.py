@@ -60,6 +60,8 @@ INTEL_MACHINE_STRINGS = {"i386", "i486", "i586", "i686", "amd64", "x86_64"}
 
 CODEQL_BINARIES_REPO = "codeql-cli-binaries"
 CODEQL_LIBRARIES_REPO = "codeql"
+CODEQL_BUNDLES_REPO = "codeql-action"
+
 CODEQL_OWNER = "github"
 VSCODE_REPO = "vscode"
 VSCODE_OWNER = "microsoft"
@@ -462,7 +464,21 @@ def choose_release_asset(assets: List[Dict[str, str]],
     try:
         return next((asset for asset in assets if asset["name"] == name_to_get))
     except (StopIteration, KeyError) as err:
-        LOG.error("🚫 Failed to match asset to name: %s", err)
+        LOG.error("🚫 Failed to match asset to name '%s': %s", name_to_get, err)
+        return None
+
+
+def choose_bundle_asset(assets: List[Dict[str, str]],
+                         platform_os: str = None) -> Optional[Dict[str, str]]:
+    """Pick asset from list by selected platform."""
+    name_to_get = (
+        'codeql-bundle' +
+        f'{"" if (platform_os is None or platform_os == ALL_OS) else f"-{OS_TO_QL_CLI_ASSET_NAME.get(platform_os)}"}'
+        + '.tar.gz')
+    try:
+        return next((asset for asset in assets if asset["name"] == name_to_get))
+    except (StopIteration, KeyError) as err:
+        LOG.error("🚫 Failed to match asset to name '%s': %s", name_to_get, err)
         return None
 
 
@@ -865,8 +881,8 @@ def query_vscode(vscode_version: Optional[str],
             LOG.error("🚫 Error getting version: %s", vscode_version)
             return (None, None)
 
-    LOG.info("✅ VSCode version is %s, getting for platform %s/%s/%s", vscode_version,
-             platform_os, machine, bits)
+    LOG.info("✅ VSCode version is %s, getting for platform %s/%s/%s",
+             vscode_version, platform_os, machine, bits)
 
     # handle the os
     vscode_os: str = VSCODE_OS_MAPPING.get(platform_os, "unknown")
@@ -1080,15 +1096,19 @@ def query_vscode_extension(
         vscode_extension = marketplace.latest(MARKETPLACE_CODEQL_FQNAME)
         LOG.debug(vscode_extension)
         if vscode_extension is None:
-            LOG.error("🚫 Failed to get latest version info for VSCode extension.")
+            LOG.error(
+                "🚫 Failed to get latest version info for VSCode extension.")
             return (None, None)
         vscode_extension_version = vscode_extension["version"]
     else:
-        if vscode_extension_version not in marketplace.versions(MARKETPLACE_CODEQL_FQNAME):
-            LOG.error("🚫 Version not found for VSCode extension: %s", vscode_extension_version)
+        if vscode_extension_version not in marketplace.versions(
+                MARKETPLACE_CODEQL_FQNAME):
+            LOG.error("🚫 Version not found for VSCode extension: %s",
+                      vscode_extension_version)
             return (None, None)
 
-    LOG.info("✅ VSCode extension version is %s, getting", vscode_extension_version)
+    LOG.info("✅ VSCode extension version is %s, getting",
+             vscode_extension_version)
 
     filename = marketplace.download(MARKETPLACE_CODEQL_FQNAME,
                                     vscode_extension_version)
@@ -1097,6 +1117,106 @@ def query_vscode_extension(
 
     LOG.error("🚫 Failed to get VSCode extension.")
     return (None, None)
+
+def query_bundle(
+        tag: str,
+        session: Session,
+        platform_os: str,
+        bits: str,
+        machine: str,
+        cli_tag: str = None,
+        list_tags: bool = False,
+        no_bundle: bool = False,
+        dry_run: bool = False,
+        token: Optional[str] = None,
+        download_path: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """Query the CLI releases and get one if required."""
+    if no_bundle:
+        return (None, None)
+
+    get_bundle = GitHubApi(CODEQL_OWNER,
+                        CODEQL_BUNDLES_REPO,
+                        session,
+                        token,
+                        download_path=download_path)
+    
+    # TODO: resolve to a named version, not a date stamp
+    # Do this by grabbing metadata for each release, finding the `cli-version-2.12.4.txt` file, and parsing the version of the filename
+    if list_tags:
+        print(f"✅ CodeQL bundle tags: {get_bundle.release_names()}")
+        return (None, None)
+
+    bundle_tag = None
+
+    if cli_tag is not None or tag is not None:
+        bundle_tag = f"{cli_tag if tag is None else tag}"
+    else:
+        latest = get_bundle.latest()
+        if latest:
+            # TODO: resolve to a named version, not a date stamp
+            bundle_tag = f"{latest.get('tag_name')}"
+        else:
+            LOG.error("🚫 Could not get latest bundle version")
+            return (None, None)
+
+    LOG.info("✅ Bundle tag is %s", bundle_tag)
+
+    if bits == BITS_32:
+        LOG.error("🚫 No bundle releases are available for 32 bit")
+        return (None, None)
+
+    item = get_bundle.release(tag)
+
+    if item is None:
+        LOG.error("🚫 Error getting metadata for bundle release: %s",
+                  "latest" if tag is None else tag)
+        return (None, None)
+
+    bundle_tag = item.get("tag_name")
+
+    if bundle_tag is None:
+        LOG.error("🚫 Bundle tag is not present in bundle release metadata: %s", item)
+        return (None, None)
+
+    LOG.info("✅ Bundle tag is %s, getting for platform %s/%s/%s", bundle_tag,
+             platform_os, machine, bits)
+
+    # check if we want macos, arm - if so, check release is >= CODEQL_BINARY_SUPPORTS_M1_VERSION
+    # https://github.com/github/codeql-cli-binaries/blob/HEAD/CHANGELOG.md
+    if platform_os == MACOS_OS and machine == MACHINE_ARM:
+        if False and semantic_lt(bundle_tag, CODEQL_BINARY_SUPPORTS_M1_VERSION):
+            LOG.error(
+                "🚫 This version of the bundle does not support the M-series chip. Please choose a newer version."
+            )
+            return (None, None)
+
+    LOG.debug(json.dumps(item, indent=2))
+
+    assets: Optional[Any] = item.get("assets")
+
+    if assets is not None:
+        LOG.debug(json.dumps(assets, indent=2))
+        asset: Optional[Dict[str,
+                             str]] = choose_bundle_asset(assets, platform_os)
+        if asset is not None:
+            bundle_filename = get_release_asset(asset,
+                                             session,
+                                             dry_run=dry_run,
+                                             download_path=download_path)
+            if not isinstance(bundle_filename, str) and not dry_run:
+                LOG.error("🚫 Failed to get release asset")
+                return (None, None)
+            bundle_filename = bundle_filename if isinstance(bundle_filename,
+                                                      str) else None
+        else:
+            LOG.error("🚫 Failed to choose asset")
+            return (None, None)
+    else:
+        LOG.error("🚫 Failed to locate assets")
+        return (None, None)
+
+    return (bundle_tag, bundle_filename)
 
 
 def run(args: Namespace) -> bool:
@@ -1155,6 +1275,31 @@ def run(args: Namespace) -> bool:
 
     if lib_file is not None and args.dry_run is None:
         LOG.debug("ℹ️ Downloaded library to %s", lib_file)
+
+    bundle_tag: Optional[str]
+    bundle_file: Optional[str]
+
+    bundle_tag, bundle_file = query_bundle(args.bundle_tag,
+                                  session,
+                                  platform_os,
+                                  bits,
+                                  machine,
+                                  cli_tag=cli_tag,
+                                  list_tags=args.list_tags,
+                                  no_bundle=args.no_bundle,
+                                  dry_run=args.dry_run,
+                                  token=token,
+                                  download_path=args.download_path)
+
+    if not args.list_tags and not args.no_cli and cli_tag is None:
+        LOG.error("🔥 Failed to get/query CLI releases. "
+                  "Please check the arguments you passed in, "
+                  "try https://github.com/github/codeql-cli-binaries/releases"
+                  " or report the error in an issue.")
+        return False
+
+    if cli_file is not None and args.dry_run is None:
+        LOG.debug("ℹ️ Downloaded CLI to %s", cli_file)
 
     vscode_version, vscode_file = query_vscode(
         args.vscode_ver,
@@ -1225,7 +1370,7 @@ def add_arguments(parser: ArgumentParser) -> None:
         "--tag",
         required=False,
         help=
-        "Which tag of the CodeQL CLI/library to retrieve (gets 'latest' if absent)"
+        "Which tag of the CodeQL CLI/library/bundle to retrieve (gets 'latest' if absent)"
     )
     parser.add_argument(
         "-l",
@@ -1233,6 +1378,12 @@ def add_arguments(parser: ArgumentParser) -> None:
         required=False,
         help=
         "Which tag of the CodeQL library to retrieve (if absent, uses --tag)")
+    parser.add_argument(
+        "-bt",
+        "--bundle-tag",
+        required=False,
+        help=
+        "Which tag of the CodeQL bundle to retrieve (if absent, uses --tag)")
     parser.add_argument(
         "-v",
         "--vscode-ver",
@@ -1298,6 +1449,10 @@ def add_arguments(parser: ArgumentParser) -> None:
                         "--no-lib",
                         action="store_true",
                         help="Do not grab the CodeQL library")
+    parser.add_argument("-B",
+                        "--no-bundle",
+                        action="store_true",
+                        help="Do not grab the CodeQL bundle")
     parser.add_argument("-V",
                         "--no-vscode",
                         action="store_true",
